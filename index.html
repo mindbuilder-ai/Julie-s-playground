@@ -1,0 +1,3970 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StarSpeech — Kids English Shadowing Studio</title>
+  <meta name="description" content="Interactive 12-line English speech shadowing, word puzzle warm-up, and showtime stage app for kids." />
+  <meta property="og:title" content="StarSpeech — Kids English Shadowing Studio" />
+  <meta property="og:description" content="Interactive 12-line English speech shadowing, word puzzle warm-up, and showtime stage app for kids." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Outfit', 'sans-serif'],
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style id="appBaseStyles">
+    :root {
+      --canvas: #F8FAFC;
+      --surface: #FFFFFF;
+      --surface-done: #ECFDF5;
+      --border-subtle: #E2E8F0;
+      --border-done: #6EE7B7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--canvas);
+      color: #0F172A;
+      margin: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, .font-display {
+      font-family: 'Outfit', system-ui, sans-serif;
+      text-wrap: balance;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Tactile kid-friendly button physics */
+    .btn-tactile {
+      transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+                  background-color 140ms ease,
+                  border-color 140ms ease,
+                  box-shadow 140ms ease;
+    }
+    .btn-tactile:active:not(:disabled) {
+      transform: translateY(1px) scale(0.985);
+    }
+    .btn-tactile:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid #0284C7;
+      outline-offset: 2px;
+    }
+
+    /* Star pop celebration */
+    @keyframes starPop {
+      0% { transform: scale(0.5); opacity: 0.4; }
+      65% { transform: scale(1.22); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-star-pop {
+      animation: starPop 380ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Active audio wave bars (strictly shown during active playback/recording) */
+    @keyframes eqBar {
+      0%, 100% { transform: scaleY(0.35); }
+      50% { transform: scaleY(1); }
+    }
+    .eq-bar {
+      transform-origin: bottom;
+      animation: eqBar 520ms ease-in-out infinite;
+    }
+    .eq-bar:nth-child(2) { animation-delay: 140ms; }
+    .eq-bar:nth-child(3) { animation-delay: 260ms; }
+
+    /* Teleprompter smooth scroll */
+    .teleprompter-line {
+      transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease, color 200ms ease;
+    }
+
+    /* Word puzzle tile feedback */
+    .word-tile {
+      transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), background-color 140ms ease, border-color 140ms ease;
+      user-select: none;
+    }
+    .word-tile:hover {
+      transform: translateY(-1px);
+    }
+    .word-tile.dragging {
+      opacity: 0.55;
+      transform: scale(0.96);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .btn-tactile,
+      .animate-star-pop,
+      .eq-bar,
+      .teleprompter-line,
+      .word-tile {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Hidden Native Audio Source ('audio/speech1.mp3' ~ 'audio/speech12.mp3') -->
+  <audio id="nativeAudio" src="audio/speech1.mp3" preload="auto"></audio>
+  <!-- Embedded User Configuration (baked in when exporting standalone index.html) -->
+  <script id="embeddedConfigJson" type="application/json">{}</script>
+
+  <!-- Confetti Canvas for Showtime & 3-Star Celebrations -->
+  <canvas id="confettiCanvas" class="fixed inset-0 pointer-events-none z-50" aria-hidden="true"></canvas>
+
+  <!-- Top Navigation Bar (Strict 3-Zone Contract) -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4 sm:gap-8">
+      <!-- Zone 1: Single-line brand wordmark -->
+      <a href="#shadowing" onclick="switchStage('shadowing'); return false;" class="font-display text-xl font-extrabold tracking-tight text-slate-900 whitespace-nowrap shrink-0">
+        StarSpeech
+      </a>
+
+      <!-- Zone 2: Concise single-line stage navigation links -->
+      <nav aria-label="Learning stages" class="flex items-center gap-2 sm:gap-6 overflow-x-auto">
+        <button id="nav-shadowing" onclick="switchStage('shadowing')" data-i18n="navShadowing" class="nav-link py-2 px-1 text-sm font-semibold border-b-2 border-sky-600 text-sky-700 whitespace-nowrap shrink-0 transition-colors">
+          Shadowing Practice
+        </button>
+        <button id="nav-puzzle" onclick="switchStage('puzzle')" data-i18n="navPuzzle" class="nav-link py-2 px-1 text-sm font-semibold border-b-2 border-transparent text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors">
+          Word Puzzle
+        </button>
+        <button id="nav-showtime" onclick="switchStage('showtime')" data-i18n="navShowtime" class="nav-link py-2 px-1 text-sm font-semibold border-b-2 border-transparent text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors">
+          Showtime Stage
+        </button>
+      </nav>
+
+      <!-- Zone 3: Language Switcher & Primary Utility Action -->
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="inline-flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200" role="group" aria-label="Language switch">
+          <button id="langBtnEn" onclick="setUiLang('en')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors">
+            EN
+          </button>
+          <button id="langBtnKo" onclick="setUiLang('ko')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors">
+            한국어
+          </button>
+        </div>
+        <button onclick="openSetupModal()" data-i18n="btnAudioScript" class="btn-tactile min-h-[40px] px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold whitespace-nowrap shrink-0">
+          Audio &amp; Script
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+    <!-- Top Speech Script Selector (1~12) -->
+    <div class="mb-6 rounded-2xl bg-white border border-slate-200 px-5 py-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 min-w-0">
+        <label for="speechSelector" class="font-display text-sm sm:text-base font-extrabold text-slate-900 whitespace-nowrap shrink-0" data-i18n="speechSelectLabel">
+          스피치 원고 선택 (1~12번)
+        </label>
+        <select id="speechSelector" onchange="selectSpeech(Number(this.value))"
+          class="min-h-[44px] w-full md:max-w-lg px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-white text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500">
+          <!-- Options rendered dynamically -->
+        </select>
+      </div>
+      <div class="flex items-center gap-2 text-xs font-semibold text-slate-500 shrink-0 tabular-nums">
+        <span data-i18n="activeAudioLabel">Audio File:</span>
+        <code id="activeAudioFilename" class="font-mono text-xs text-sky-800 bg-sky-50 px-2 py-1 rounded-lg">audio/speech1.mp3</code>
+      </div>
+    </div>
+
+    <!-- Audio Source Status Banner (shown gracefully only if audio/speechN.mp3 is not found) -->
+    <div id="audioNoticeBanner" class="hidden mb-6 rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="text-sm text-amber-950">
+        <p id="audioMissingTitleEl" class="font-semibold">Native audio file <code class="font-mono text-xs bg-amber-100 px-1.5 py-0.5 rounded">audio/speech1.mp3</code> was not detected.</p>
+        <p id="audioMissingDescEl" class="text-amber-800 mt-0.5">Place files in <code class="font-mono text-xs">C:\public\speech-studio\audio\</code> (<code class="font-mono text-xs">audio/speech1.mp3</code>), load it manually now, or use the built-in preview voice.</p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <label class="btn-tactile cursor-pointer inline-flex items-center justify-center min-h-[40px] px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold whitespace-nowrap shrink-0">
+          <span id="btnLoadAudioLabel">Load audio/speech1.mp3</span>
+          <input id="quickAudioUpload" type="file" accept="audio/*" class="sr-only" onchange="handleAudioFileUpload(event)" />
+        </label>
+        <button onclick="dismissAudioNotice()" data-i18n="btnDismiss" class="min-h-[40px] px-3 py-2 rounded-xl text-sm font-semibold text-amber-900 hover:bg-amber-100 whitespace-nowrap shrink-0">
+          Dismiss
+        </button>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- STAGE 1: SHADOWING PRACTICE (MAIN FOCUS)                  -->
+    <!-- ========================================================= -->
+    <section id="stage-shadowing" class="space-y-6">
+
+      <!-- Practice Header & Star Progress Card -->
+      <div class="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div class="space-y-1.5 max-w-2xl">
+            <h1 class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight" data-i18n="shadowTitle">
+              Shadowing Practice: Listen &amp; Repeat
+            </h1>
+            <p class="text-slate-600 text-sm sm:text-base" data-i18n-html="shadowDesc">
+              Tap <strong class="text-sky-700">Listen</strong> to hear the native speaker, tap <strong class="text-rose-600">Record</strong> to speak the line, then tap <strong class="text-amber-700">Compare</strong> to hear both voices!
+            </p>
+          </div>
+
+          <!-- Star Counter & Progress Summary -->
+          <div class="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0" aria-hidden="true">
+                <svg class="w-6 h-6 fill-amber-500" viewBox="0 0 24 24"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z"/></svg>
+              </div>
+              <div>
+                <div class="font-display text-2xl font-extrabold text-slate-900 tabular-nums leading-none">
+                  <span id="totalStarsCount">0</span> <span class="text-base font-semibold text-slate-500" data-i18n="starsOutOf">/ 36 Stars</span>
+                </div>
+                <div id="completedLinesSummary" class="text-xs font-medium text-slate-500 mt-1 tabular-nums">
+                  <span id="completedLinesCount">0</span> of 12 lines practiced
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar & Kid Controls Toolbar -->
+        <div class="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex-1 flex items-center gap-3">
+            <div class="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div id="overallProgressBar" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <span id="overallProgressPct" class="font-mono text-xs font-semibold text-slate-600 tabular-nums whitespace-nowrap">0%</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <!-- Playback Speed Segmented Control -->
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl" role="group" aria-label="Audio playback speed">
+              <button id="speedSlowBtn" onclick="setPlaybackRate(0.8)" data-i18n="speedSlow" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors">
+                0.8x Slow
+              </button>
+              <button id="speedNormalBtn" onclick="setPlaybackRate(1.0)" data-i18n="speedNormal" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors">
+                1.0x Normal
+              </button>
+            </div>
+
+            <!-- Play Full Script Audio -->
+            <button id="playAllShadowBtn" onclick="togglePlayAllShadowing()" class="btn-tactile min-h-[38px] px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-semibold whitespace-nowrap shrink-0">
+              Play Full Speech
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SpeechRecognition Browser Support Info (shown only if unsupported) -->
+      <div id="speechSupportNotice" data-i18n="speechUnsupported" class="hidden rounded-2xl bg-sky-50 border border-sky-200 px-5 py-3 text-sm text-sky-900">
+        Your browser does not support automatic speech scoring. You can still record your voice and compare it directly against the native speaker!
+      </div>
+
+      <!-- 12-Line Shadowing List -->
+      <div id="shadowingLinesContainer" class="space-y-4">
+        <!-- Rendered dynamically via renderShadowingLines() -->
+      </div>
+
+      <!-- Next Stage Callout at bottom of 12 lines -->
+      <div class="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="font-display text-lg font-bold text-slate-900" data-i18n="readyStageTitle">Ready for the big stage?</h2>
+          <p class="text-sm text-slate-600" data-i18n="readyStageDesc">Warm up with the Word Puzzle or perform all 12 lines on the Showtime Stage.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 shrink-0">
+          <button onclick="switchStage('puzzle')" data-i18n="btnTryPuzzle" class="btn-tactile min-h-[44px] px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold whitespace-nowrap shrink-0">
+            Try Word Puzzle
+          </button>
+          <button onclick="switchStage('showtime')" data-i18n="btnGoShowtime" class="btn-tactile min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold whitespace-nowrap shrink-0">
+            Go to Showtime Stage
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- STAGE 2: WARM-UP - WORD PUZZLE (SENTENCE ASSEMBLY)        -->
+    <!-- ========================================================= -->
+    <section id="stage-puzzle" class="hidden space-y-6">
+      <div class="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight" data-i18n="puzzleTitle">
+              Word Puzzle Warm-Up
+            </h1>
+            <p class="text-slate-600 text-sm sm:text-base mt-1" data-i18n="puzzleDesc">
+              Tap or drag the scrambled word blocks into the tray in the right order before practicing out loud.
+            </p>
+          </div>
+          <div class="text-sm font-semibold text-slate-700 tabular-nums whitespace-nowrap shrink-0">
+            <span data-i18n="puzzleSolvedLabel">Solved:</span> <span id="puzzleSolvedCount" class="text-emerald-700 font-bold">0</span> / 12
+          </div>
+        </div>
+
+        <!-- 12 Line Number Selector Strip -->
+        <div id="puzzleLineSelector" class="mt-5 grid grid-cols-6 sm:grid-cols-12 gap-2">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Puzzle Workspace Card -->
+      <div class="rounded-2xl bg-white border border-slate-200 p-5 sm:p-7 shadow-sm space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2 text-xs font-semibold text-slate-500 tabular-nums">
+              <span id="puzzleCurrentLabel">Line 01</span>
+              <span aria-hidden="true">&middot;</span>
+              <span id="puzzleTimingLabel">0:00 &ndash; 0:04</span>
+            </div>
+          </div>
+          <button onclick="playPuzzleHintAudio()" class="btn-tactile min-h-[44px] px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold inline-flex items-center gap-2 whitespace-nowrap shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            <span data-i18n="btnPuzzleListenHint">Listen Hint / 힌트 듣기</span>
+          </button>
+        </div>
+
+        <!-- Answer Drop Tray -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-600" data-i18n="puzzleTrayLabel">Your Sentence Tray (tap a word to remove it)</span>
+            <span id="puzzleTrayCounter" class="font-mono text-xs text-slate-500 tabular-nums">0 / 0 words</span>
+          </div>
+          <div id="puzzleAnswerTray"
+               ondragover="handleTrayDragOver(event)"
+               ondragleave="handleTrayDragLeave(event)"
+               ondrop="handleTrayDrop(event)"
+               class="min-h-[92px] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 flex flex-wrap items-center gap-2.5 transition-colors">
+            <!-- Placed word tiles -->
+          </div>
+        </div>
+
+        <!-- Word Bank -->
+        <div>
+          <span class="block text-xs font-bold text-slate-600 mb-2" data-i18n="puzzleBankLabel">Word Blocks (tap or drag into the tray)</span>
+          <div id="puzzleWordBank"
+               ondragover="handleBankDragOver(event)"
+               ondrop="handleBankDrop(event)"
+               class="min-h-[84px] rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-2.5">
+            <!-- Scrambled word tiles -->
+          </div>
+        </div>
+
+        <!-- Feedback Banner -->
+        <div id="puzzleFeedback" class="hidden rounded-xl px-4 py-3 text-sm font-semibold"></div>
+
+        <!-- Puzzle Actions -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button onclick="checkPuzzleAnswer()" data-i18n="btnPuzzleCheck" class="btn-tactile min-h-[46px] px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold whitespace-nowrap shrink-0">
+              Check Answer / 확인하기
+            </button>
+            <button onclick="resetCurrentPuzzle()" data-i18n="btnPuzzleShuffle" class="btn-tactile min-h-[46px] px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold whitespace-nowrap shrink-0">
+              Shuffle / 다시 섞기
+            </button>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <button onclick="goToShadowingFromPuzzle()" data-i18n="btnPuzzlePracticeOutLoud" class="btn-tactile min-h-[46px] px-4 py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-sm font-bold whitespace-nowrap shrink-0">
+              Practice Out Loud &rarr;
+            </button>
+            <button onclick="nextPuzzleLine()" data-i18n="btnPuzzleNext" class="btn-tactile min-h-[46px] px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold whitespace-nowrap shrink-0">
+              Next Line / 다음 문장
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- STAGE 3: FINAL STAGE - SHOWTIME STAGE                     -->
+    <!-- ========================================================= -->
+    <section id="stage-showtime" class="hidden space-y-6">
+      <div class="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight" data-i18n="showtimeTitle">
+            Showtime Stage
+          </h1>
+          <p class="text-slate-600 text-sm sm:text-base mt-1" data-i18n="showtimeDesc">
+            Read along with the glowing teleprompter and record your complete 12-line speech performance!
+          </p>
+        </div>
+
+        <!-- Stage Controls -->
+        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button id="showtimeBgAudioBtn" onclick="toggleShowtimeGuideAudio()" class="btn-tactile min-h-[42px] px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0">
+            Play Native Audio Track
+          </button>
+          <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl" role="group" aria-label="Teleprompter scroll mode">
+            <button id="scrollAutoBtn" onclick="setTeleprompterMode('auto')" data-i18n="scrollAuto" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0">
+              Auto Scroll
+            </button>
+            <button id="scrollManualBtn" onclick="setTeleprompterMode('manual')" data-i18n="scrollManual" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0">
+              Manual Next
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Theatrical Teleprompter Stage -->
+      <div class="rounded-3xl bg-slate-900 text-white p-5 sm:p-8 shadow-lg border border-slate-800 relative overflow-hidden">
+        <!-- Subtle warm spotlight radial glow -->
+        <div class="pointer-events-none absolute inset-x-0 -top-24 h-64 bg-[radial-gradient(ellipse_at_center,_rgba(251,191,36,0.16),_transparent_70%)]" aria-hidden="true"></div>
+
+        <!-- Top Teleprompter Header -->
+        <div class="relative flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <span class="font-display text-sm font-bold text-amber-300 tracking-wide" data-i18n="teleprompterLabel">TELEPROMPTER</span>
+            <span aria-hidden="true" class="text-slate-600">&middot;</span>
+            <span id="showtimeLineCounter" class="font-mono text-xs text-slate-300 tabular-nums">Line 01 of 12</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="showtimeTimer" class="font-mono text-sm font-semibold text-slate-200 tabular-nums">00:00</span>
+            <div id="showtimeRecBadge" class="hidden items-center gap-2 text-xs font-bold text-rose-400">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+              <span data-i18n="onAirLabel">ON AIR</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Teleprompter Viewport -->
+        <div id="teleprompterViewport" class="relative my-6 h-[280px] sm:h-[310px] overflow-y-auto scroll-smooth pr-2 space-y-5">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <!-- Stage Navigation & Big Record Performance CTA -->
+        <div class="relative pt-5 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-2.5 w-full md:w-auto justify-center md:justify-start">
+            <button onclick="stepShowtimeLine(-1)" data-i18n="btnShowtimePrev" class="btn-tactile min-h-[46px] px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-sm font-semibold whitespace-nowrap shrink-0">
+              &larr; Previous
+            </button>
+            <button onclick="stepShowtimeLine(1)" data-i18n="btnShowtimeNext" class="btn-tactile min-h-[46px] px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-sm font-bold whitespace-nowrap shrink-0">
+              Next Line / 다음 문장 &rarr;
+            </button>
+          </div>
+
+          <button id="recordFullPerfBtn" onclick="toggleFullPerformanceRecording()" class="btn-tactile w-full md:w-auto min-h-[54px] px-8 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-display text-base sm:text-lg font-bold inline-flex items-center justify-center gap-3 shadow-md whitespace-nowrap shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            <span id="recordFullPerfLabel">Record Full Performance / 전체 발표 녹음</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Full Performance Playback Card (appears after recording) -->
+      <div id="showtimeResultCard" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <h2 class="font-display text-xl font-extrabold text-emerald-950" data-i18n="showtimeDoneTitle">Bravo! Full Performance Recorded!</h2>
+          <p class="text-sm text-emerald-800" data-i18n="showtimeDoneDesc">Listen back to your complete speech or save your recording.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 shrink-0">
+          <audio id="fullPerfPlaybackAudio" controls class="h-10 max-w-[260px]"></audio>
+          <a id="downloadFullPerfLink" download="my-english-speech.webm" data-i18n="btnDownloadAudio" class="btn-tactile min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold inline-flex items-center whitespace-nowrap shrink-0">
+            Download Audio
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Quiet Footer -->
+  <footer class="border-t border-slate-200 bg-white mt-12">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      <span data-i18n="footerLeft">StarSpeech &middot; 12-Line English Shadowing Studio</span>
+      <span data-i18n-html="footerRight">Works offline with <code class="font-mono">audio/speech1.mp3</code></span>
+    </div>
+  </footer>
+
+  <!-- ========================================================= -->
+  <!-- AUDIO & SCRIPT SETUP MODAL                                -->
+  <!-- ========================================================= -->
+  <div id="setupModal" class="hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="setupModalTitle">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+        <h2 id="setupModalTitle" class="font-display text-xl font-bold text-slate-900" data-i18n="modalTitle">Audio Source &amp; 12-Line Script</h2>
+        <button onclick="closeSetupModal()" data-i18n="btnClose" class="min-h-[40px] px-3 py-1.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          Close
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-6">
+        <!-- Audio Source Section -->
+        <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 id="modalAudioHeadingEl" class="font-display text-base font-bold text-slate-900">Native Speaker Audio (<code class="font-mono text-xs">audio/speech1.mp3</code>)</h3>
+              <p id="modalAudioStatus" class="text-xs text-slate-600 mt-0.5">Checking audio/speech1.mp3...</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+              <button id="btnClearCustomAudio" type="button" onclick="clearSavedCustomAudio()" data-i18n="btnRevertDefaultAudio"
+                class="hidden min-h-[40px] px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold whitespace-nowrap">
+                Use Default Path
+              </button>
+              <label class="btn-tactile cursor-pointer inline-flex items-center justify-center min-h-[40px] px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold whitespace-nowrap shrink-0">
+                <span data-i18n="btnChooseAudioFile">Choose Audio File (.mp3)</span>
+                <input type="file" accept="audio/*" class="sr-only" onchange="handleAudioFileUpload(event, true)" />
+              </label>
+            </div>
+          </div>
+          <p id="modalAudioTipEl" class="text-xs text-slate-500">
+            For automatic loading in <code class="font-mono">C:\public\speech-studio\</code>, save your native speaker audio files as <code class="font-mono">audio/speech1.mp3</code> ~ <code class="font-mono">audio/speech12.mp3</code>.
+          </p>
+        </div>
+
+        <!-- Bulk & 12-Speech Script Generator / Editor -->
+        <div class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 class="font-display text-base font-bold text-slate-900" data-i18n="modalCustomizeTitle">Script Generator (Speeches 1–12)</h3>
+              <p class="text-xs text-slate-500" data-i18n="modalCustomizeDesc">Pick speech #1–12 and paste the entire script at once. It automatically maps to the 12 audio segments (0s–67s).</p>
+            </div>
+            <button onclick="restoreDefaultScript()" data-i18n="btnRestoreScript" class="text-xs font-semibold text-sky-700 hover:underline whitespace-nowrap shrink-0 self-start sm:self-center">
+              Restore Default Script
+            </button>
+          </div>
+
+          <!-- 1~12 Speech Number Quick Selector inside Modal -->
+          <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-700" data-i18n="modalPickSpeechLabel">Select Speech Slot (1–12):</span>
+              <span id="modalSpeechAudioTag" class="font-mono text-xs text-sky-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-lg">audio/speech1.mp3</span>
+            </div>
+            <div id="modalSpeechGrid" class="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
+              <!-- Rendered dynamically -->
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+              <label for="modalSpeechTitleInput" class="text-xs font-semibold text-slate-600 whitespace-nowrap shrink-0" data-i18n="modalTitleLabel">Speech Title:</label>
+              <input id="modalSpeechTitleInput" type="text" oninput="onBulkInputChange()"
+                class="flex-1 min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                placeholder="Enter speech title..." />
+            </div>
+
+            <!-- Audio Duration & Segment Timing Quick Controls -->
+            <div class="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <label for="modalTotalDurationInput" class="text-xs font-bold text-slate-700 whitespace-nowrap" data-i18n="modalTotalDurLabel">Total Audio Length (sec):</label>
+                <input id="modalTotalDurationInput" type="number" step="0.1" min="1" max="3600" oninput="modalEditorDirty = true"
+                  class="w-24 min-h-[36px] px-2.5 py-1 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                <button type="button" onclick="fitModalTimingsToTotalDuration()" data-i18n="btnAutoFitTimings"
+                  class="min-h-[36px] px-3 py-1 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold whitespace-nowrap transition-colors">
+                  Auto-Fit 12 Segments
+                </button>
+                <button id="btnUseDetectedDur" type="button" onclick="applyDetectedAudioDuration()"
+                  class="hidden min-h-[36px] px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold whitespace-nowrap transition-colors">
+                  Use File Length
+                </button>
+              </div>
+              <button type="button" onclick="setScriptEditorMode('lines')" data-i18n="btnEditLineTimings"
+                class="text-xs font-bold text-sky-700 hover:underline whitespace-nowrap">
+                Edit Line Times (sec) &rarr;
+              </button>
+            </div>
+          </div>
+
+          <!-- Editor Mode Switch (Bulk Paste vs Line-by-Line) -->
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200" role="tablist">
+              <button id="editorTabBulk" type="button" onclick="setScriptEditorMode('bulk')" data-i18n="tabBulkMode"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap transition-colors">
+                Bulk Paste (Whole Script)
+              </button>
+              <button id="editorTabLines" type="button" onclick="setScriptEditorMode('lines')" data-i18n="tabLinesMode"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap transition-colors">
+                12-Line Fine Edit
+              </button>
+            </div>
+            <span id="modalSaveToast" class="hidden text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg"></span>
+          </div>
+
+          <!-- Bulk Paste Panel (Default) -->
+          <div id="bulkEditorPanel" class="space-y-3">
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between gap-2">
+                <label for="bulkScriptEn" class="text-xs font-bold text-slate-700" data-i18n="bulkEnLabel">Full English Script (paste whole text or 12 lines)</label>
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="autoSplitBulkInputs()" data-i18n="btnAutoSplit12"
+                    class="px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold whitespace-nowrap transition-colors">
+                    Auto-Split to 12 Lines
+                  </button>
+                  <button type="button" onclick="clearBulkInputs()" data-i18n="btnClearBulk"
+                    class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap transition-colors">
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <textarea id="bulkScriptEn" rows="10" oninput="onBulkInputChange()"
+                class="w-full px-3.5 py-3 rounded-2xl border border-slate-300 bg-white text-sm leading-relaxed font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                placeholder="Paste the entire English speech here..."></textarea>
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span id="bulkStatusBadge" class="font-semibold text-slate-600"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Optional 12-Line & Timing Fine Edit Panel -->
+          <div id="lineEditorPanel" class="hidden space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+              <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                <input id="autoChainTimingsCheckbox" type="checkbox" checked class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
+                <span data-i18n="autoChainTimingsLabel">Auto-connect next line start time</span>
+              </label>
+              <button type="button" onclick="resetModalTimingsOnly()" data-i18n="btnResetTimingsOnly"
+                class="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:underline whitespace-nowrap">
+                Reset Timings (0–67s)
+              </button>
+            </div>
+            <div id="scriptEditorRows" class="space-y-3">
+              <!-- Rendered dynamically when toggled -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Full Settings Backup & Configured HTML Export -->
+        <div class="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 space-y-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900" data-i18n="modalBackupTitle">Save to Local HTML File / Backup (.json)</h3>
+            <p class="text-xs text-slate-600 mt-0.5" data-i18n="modalBackupDesc">Browser storage does not transfer automatically when downloading source files. Click "Download Configured index.html" to save all 12 custom speeches &amp; timings directly inside index.html for C:\public\speech-studio\.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="downloadConfiguredHtml()" data-i18n="btnDownloadConfiguredHtml"
+              class="btn-tactile min-h-[38px] px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold whitespace-nowrap">
+              Download Configured index.html
+            </button>
+            <button type="button" onclick="exportAllSettingsJson()" data-i18n="btnExportBackup"
+              class="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold whitespace-nowrap">
+              Export Backup (.json)
+            </button>
+            <label class="cursor-pointer inline-flex items-center justify-center min-h-[38px] px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold whitespace-nowrap">
+              <span data-i18n="btnImportBackup">Import Backup</span>
+              <input type="file" accept="application/json,.json" class="sr-only" onchange="importAllSettingsJson(event)" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Reset Progress Inline Confirmation -->
+        <div class="rounded-2xl border border-rose-200 bg-rose-50/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-rose-950" data-i18n="modalResetTitle">Reset Stars &amp; Recordings</h3>
+            <p class="text-xs text-rose-800" data-i18n="modalResetDesc">Clears all earned stars, puzzle progress, and voice recordings.</p>
+          </div>
+          <div id="resetConfirmArea" class="shrink-0">
+            <button onclick="askResetConfirmation()" data-i18n="btnResetProgress" class="min-h-[38px] px-4 py-1.5 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold whitespace-nowrap">
+              Reset Progress
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+        <button type="button" onclick="saveCurrentModalSpeechOnly()" data-i18n="btnSaveStay"
+          class="min-h-[42px] px-4 py-2 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 text-sm font-bold">
+          Save This Speech
+        </button>
+        <div class="flex items-center gap-3 ml-auto">
+          <button onclick="closeSetupModal()" data-i18n="btnCancel" class="min-h-[42px] px-4 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-200/70">
+            Cancel
+          </button>
+          <button onclick="saveScriptEdits()" data-i18n="btnSaveScript" class="btn-tactile min-h-[42px] px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold">
+            Save &amp; Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- APPLICATION LOGIC                                         -->
+  <!-- ========================================================= -->
+  <script>
+    // 1. Default Native Audio Timings (in seconds) for the 12 lines (customizable per speech)
+    const DEFAULT_AUDIO_TIMINGS = [
+      { start: 0, end: 4 },    // Line 1
+      { start: 4, end: 7 },    // Line 2
+      { start: 7, end: 12 },   // Line 3
+      { start: 12, end: 16 },  // Line 4
+      { start: 16, end: 21 },  // Line 5
+      { start: 21, end: 27 },  // Line 6
+      { start: 27, end: 32 },  // Line 7
+      { start: 32, end: 36 },  // Line 8
+      { start: 36, end: 43 },  // Line 9
+      { start: 43, end: 47 },  // Line 10
+      { start: 47, end: 52 },  // Line 11
+      { start: 52, end: 67 }   // Line 12
+    ];
+
+    // 2. Library of 12 Distinct 12-Line Kids English Speech Scripts (audio/speech1.mp3 ~ audio/speech12.mp3)
+    const LOCAL_STUDIO_AUDIO_BASE = "file:///C:/public/speech-studio/";
+    const SPEECH_LIBRARY = [
+      {
+        id: 1,
+        audioFile: "audio/speech1.mp3",
+        titleEn: "The Power of Reading Books",
+        titleKo: "매일 책을 읽는 힘",
+        lines: [
+          { en: "Hello everyone! Welcome to my speech today.", ko: "안녕하세요 여러분! 오늘 제 발표에 오신 것을 환영합니다." },
+          { en: "My name is Leo, and I love learning.", ko: "제 이름은 레오이고, 저는 배우는 것을 정말 좋아해요." },
+          { en: "Today, I want to talk about something very special to me.", ko: "오늘 저는 저에게 아주 특별한 것에 대해 이야기하고 싶어요." },
+          { en: "It is the power of reading books every day.", ko: "그것은 바로 매일 책을 읽는 힘입니다." },
+          { en: "When we open a book, we can travel to amazing new worlds.", ko: "우리가 책을 펼치면, 놀라운 새로운 세상으로 여행을 떠날 수 있어요." },
+          { en: "We can meet brave heroes, clever animals, and kind friends along the way.", ko: "그 길에서 용감한 영웅들, 똑똑한 동물들, 그리고 친절한 친구들을 만날 수 있어요." },
+          { en: "Reading helps our imagination grow bigger and brighter.", ko: "독서는 우리의 상상력이 더 크고 밝게 자라도록 도와줍니다." },
+          { en: "It also teaches us new words and ideas.", ko: "또한 우리에게 새로운 단어와 생각들을 가르쳐 주어요." },
+          { en: "Even just fifteen minutes of reading before bed can make every day a wonderful adventure.", ko: "잠자리에 들기 전 단 15분의 독서만으로도 매일이 멋진 모험이 될 수 있어요." },
+          { en: "So let us pick up a book together today.", ko: "그러니 오늘 우리 함께 책 한 권을 집어 들어요." },
+          { en: "Every single page brings a brand new story waiting for us.", ko: "모든 페이지마다 우리를 기다리는 완전히 새로운 이야기가 담겨 있어요." },
+          { en: "Thank you so much for listening to my speech. I hope you enjoy your next reading adventure, and let us keep learning and growing together every day. Thank you!", ko: "제 발표를 들어주셔서 정말 감사합니다. 다음 독서 모험도 즐겁게 보내시길 바라며, 매일 함께 배우고 성장해 나가요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 2,
+        audioFile: "audio/speech2.mp3",
+        titleEn: "My Dream of Exploring Space",
+        titleKo: "우주를 탐험하는 나의 꿈",
+        lines: [
+          { en: "Good morning, friends and teachers! Thanks for being here.", ko: "좋은 아침이에요, 친구들과 선생님! 와주셔서 감사합니다." },
+          { en: "I am Mina, and I love looking at the night sky.", ko: "저는 미나이고, 밤하늘을 올려다보는 것을 좋아해요." },
+          { en: "Whenever I see bright stars, I imagine flying high above the clouds.", ko: "반짝이는 별들을 볼 때마다, 구름 위로 높이 날아오르는 상상을 해요." },
+          { en: "My biggest dream is to become a space explorer.", ko: "저의 가장 큰 꿈은 우주 탐험가가 되는 것입니다." },
+          { en: "I want to ride a shiny silver rocket all the way to the moon.", ko: "반짝이는 은색 로켓을 타고 달까지 날아가 보고 싶어요." },
+          { en: "Up in space, astronauts float in the air and see our blue Earth spinning.", ko: "우주에서는 우주비행사들이 공중에 둥둥 뜨고, 푸른 지구가 도는 모습을 볼 수 있어요." },
+          { en: "Exploring distant planets takes hard work and brave teamwork.", ko: "먼 행성을 탐험하려면 꾸준한 노력과 용감한 팀워크가 필요해요." },
+          { en: "That is why I study science and math carefully.", ko: "그래서 저는 과학과 수학을 열심히 공부하고 있어요." },
+          { en: "Maybe one day, our team will discover new water, shining rocks, or safe homes on Mars.", ko: "언젠가는 우리 팀이 화성에서 새로운 물과 반짝이는 암석, 그리고 안전한 집을 발견할지도 몰라요." },
+          { en: "Every big journey begins with one curious question.", ko: "모든 위대한 여행은 호기심 어린 질문 하나에서 시작됩니다." },
+          { en: "Let us never stop dreaming about what lies beyond the stars.", ko: "별 너머에 무엇이 있을지 꿈꾸는 일을 절대 멈추지 말아요." },
+          { en: "Thank you for listening to my space dream today. Whenever you look up at the moon tonight, remember that even kids like us can reach for the universe. Thank you!", ko: "오늘 저의 우주 꿈 이야기를 들어주셔서 감사합니다. 오늘 밤 달을 볼 때면 우리 같은 어린이도 우주를 향해 나아갈 수 있다는 걸 기억해 주세요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 3,
+        audioFile: "audio/speech3.mp3",
+        titleEn: "Protecting Our Blue Ocean",
+        titleKo: "우리의 푸른 바다 지키기",
+        lines: [
+          { en: "Hello everyone! Have you ever visited the ocean?", ko: "안녕하세요 여러분! 여러분은 바다에 가본 적이 있나요?" },
+          { en: "The sea is full of colorful fish and gentle waves.", ko: "바다는 알록달록한 물고기들과 부드러운 파도로 가득해요." },
+          { en: "Today, I want to share why our blue ocean needs our help.", ko: "오늘 저는 푸른 바다에 왜 우리의 도움이 필요한지 이야기하려 해요." },
+          { en: "Too much plastic trash ends up floating in the water.", ko: "너무 많은 플라스틱 쓰레기가 바닷물 위에 떠다니고 있어요." },
+          { en: "Sea turtles and dolphins can get hurt when the ocean is dirty.", ko: "바다가 더러워지면 바다거북과 돌고래들이 다칠 수 있어요." },
+          { en: "Fortunately, even young students like us can make a huge difference right now.", ko: "다행히도 우리 같은 어린 학생들도 지금 바로 큰 변화를 만들 수 있어요." },
+          { en: "First, we can carry a reusable bottle every single day.", ko: "먼저, 매일 재사용 가능한 물병을 가지고 다닐 수 있어요." },
+          { en: "Second, we should always throw trash into the bin.", ko: "둘째, 쓰레기는 언제나 쓰레기통에 꼭 버려야 해요." },
+          { en: "When we visit the beach with our family, picking up just five pieces of litter helps.", ko: "가족과 해변에 놀러 갔을 때 쓰레기 다섯 개만 주워도 큰 도움이 됩니다." },
+          { en: "Clean oceans keep marine animals happy and safe.", ko: "깨끗한 바다는 해양 동물들을 행복하고 안전하게 지켜줍니다." },
+          { en: "Together, we can protect every wave and coral reef.", ko: "우리가 함께라면 모든 파도와 산호초를 지킬 수 있어요." },
+          { en: "Thank you very much for caring about our planet. Let us promise to keep our beaches spotless and protect the amazing ocean animals for many years to come. Thank you!", ko: "우리 지구를 아껴주셔서 정말 감사합니다. 해변을 깨끗하게 지키고 앞으로도 오랫동안 멋진 바다 동물들을 보호하겠다고 약속해요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 4,
+        audioFile: "audio/speech4.mp3",
+        titleEn: "Why Kindness Matters Every Day",
+        titleKo: "매일의 친절이 중요한 이유",
+        lines: [
+          { en: "Hi everyone! I am happy to speak with you.", ko: "안녕하세요 여러분! 여러분 앞에서 발표하게 되어 기뻐요." },
+          { en: "Think about the last time someone smiled at you.", ko: "누군가 여러분에게 미소 지었던 마지막 순간을 떠올려 보세요." },
+          { en: "One small act of kindness can brighten someone's entire day.", ko: "작은 친절 하나가 누군가의 하루 전체를 환하게 밝힐 수 있어요." },
+          { en: "Kindness does not cost money or take much time.", ko: "친절에는 돈이 들지 않고 많은 시간도 필요하지 않아요." },
+          { en: "We can hold the door open or share a pencil with a friend.", ko: "문을 잡아주거나 친구에게 연필을 빌려줄 수 있어요." },
+          { en: "When a classmate feels lonely at lunch, inviting them to sit together means so much.", ko: "점심시간에 반 친구가 외로워 보일 때 함께 앉자고 말하는 건 정말 큰 의미가 있어요." },
+          { en: "Kind words are like warm sunshine on a rainy afternoon.", ko: "따뜻한 말은 비 오는 오후에 비치는 따스한 햇살과 같아요." },
+          { en: "Saying thank you and please shows respect to everyone.", ko: "'고마워요'와 '부탁해요'라고 말하는 것은 모두를 존중하는 표현이에요." },
+          { en: "Best of all, when you are kind to one person, they often pass it on.", ko: "무엇보다 좋은 점은, 한 사람에게 친절을 베풀면 그 사람도 다른 사람에게 친절을 전한다는 거예요." },
+          { en: "That creates a wonderful chain of smiles around us.", ko: "그렇게 우리 주변에 멋진 미소의 연결고리가 만들어져요." },
+          { en: "Let us choose to be kind at school and home.", ko: "학교에서도 집에서도 친절을 선택하는 우리가 되어요." },
+          { en: "Thank you for listening closely today. Remember that you never know how much a simple smile or helpful hand can cheer up a friend in need. Thank you!", ko: "오늘 귀 기울여 들어주셔서 감사합니다. 작은 미소나 도움의 손길이 힘들어하는 친구에게 얼마나 큰 힘이 될지 모른다는 걸 기억해 주세요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 5,
+        audioFile: "audio/speech5.mp3",
+        titleEn: "The Secret Life of Honeybees",
+        titleKo: "꿀벌들의 신비로운 생활",
+        lines: [
+          { en: "Hello friends! Can you hear a tiny buzz?", ko: "안녕 친구들! 작은 윙윙거리는 소리가 들리나요?" },
+          { en: "Today, my favorite topic is the amazing honeybee.", ko: "오늘 제가 좋아하는 주제는 바로 놀라운 꿀벌입니다." },
+          { en: "Bees may look very small, yet they have a giant job.", ko: "꿀벌은 아주 작아 보이지만, 정말 큰일을 해내고 있어요." },
+          { en: "Every morning, worker bees fly from flower to flower.", ko: "매일 아침, 일벌들은 꽃에서 꽃으로 날아다닙니다." },
+          { en: "They collect sweet nectar to bring back to their busy hive.", ko: "일벌들은 바쁜 벌집으로 가져갈 달콤한 꿀을 모아요." },
+          { en: "At the same time, bees carry yellow pollen that helps fruit and vegetables grow.", ko: "동시에 꿀벌들은 과일과 채소가 자라도록 돕는 노란 꽃가루도 옮겨 주어요." },
+          { en: "Without honeybees, we would not have apples, berries, or pumpkins.", ko: "꿀벌이 없다면 우리는 사과나 딸기, 호박을 먹을 수 없을 거예요." },
+          { en: "Did you know bees actually dance to share directions?", ko: "꿀벌들이 길을 알려주기 위해 춤을 춘다는 걸 알고 있었나요?" },
+          { en: "Their special waggle dance tells the whole hive exactly where the best flowers are blooming.", ko: "특별한 엉덩이 춤은 벌집 전체에 가장 좋은 꽃이 어디에 피었는지 정확히 알려줘요." },
+          { en: "We can help bees by planting colorful garden flowers.", ko: "알록달록한 정원 꽃을 심어주면 꿀벌들을 도울 수 있어요." },
+          { en: "Next time you see a bee, simply watch quietly.", ko: "다음에 꿀벌을 보면 놀라지 말고 조용히 지켜봐 주세요." },
+          { en: "Thank you for listening to my story about honeybees. They work hard every sunny day to keep our gardens blooming and our tables filled with healthy food. Thank you!", ko: "꿀벌에 관한 제 이야기를 들어주셔서 감사합니다. 꿀벌들은 맑은 날마다 열심히 일하며 우리의 정원을 피우고 식탁을 건강한 음식으로 채워준답니다. 감사합니다!" }
+        ]
+      },
+      {
+        id: 6,
+        audioFile: "audio/speech6.mp3",
+        titleEn: "Learning Through Mistakes",
+        titleKo: "실수를 통해 배우는 힘",
+        lines: [
+          { en: "Hello everyone! Have you ever made a mistake?", ko: "안녕하세요 여러분! 여러분도 실수를 해본 적이 있나요?" },
+          { en: "Maybe you spilled juice or misspelled a tricky word.", ko: "아마 주스를 쏟았거나 어려운 단어 철자를 틀렸을 수도 있어요." },
+          { en: "Last month, I forgot my lines during a class play.", ko: "지난달에 저는 학예회 연극 중에 대사를 까먹었어요." },
+          { en: "At first, my face turned red and I felt embarrassed.", ko: "처음에는 얼굴이 빨개지고 정말 부끄러웠어요." },
+          { en: "Then my teacher smiled and said mistakes help our brains grow.", ko: "그때 선생님께서 미소 지으시며 실수가 우리 두뇌를 자라게 한다고 말씀해 주셨어요." },
+          { en: "Every great inventor, athlete, and musician had to fail many times before succeeding.", ko: "모든 위대한 발명가와 운동선수, 음악가들도 성공하기 전에 수많은 실패를 겪었어요." },
+          { en: "When we make a mistake, we learn what to fix.", ko: "우리가 실수를 하면 무엇을 고쳐야 하는지 배울 수 있어요." },
+          { en: "It gives us a chance to practice even smarter.", ko: "그것은 더 똑똑하게 연습할 수 있는 기회를 줍니다." },
+          { en: "So instead of giving up when something feels hard, take a deep breath and try again.", ko: "그러니 어떤 일이 어렵게 느껴질 때 포기하는 대신, 깊게 숨을 쉬고 다시 도전해 보세요." },
+          { en: "Mistakes are not the end; they are stepping stones.", ko: "실수는 끝이 아니라 앞으로 나아가는 징검다리예요." },
+          { en: "Each try makes us braver and stronger than yesterday.", ko: "매번의 시도가 우리를 어제보다 더 용감하고 강하게 만들어 줍니다." },
+          { en: "Thank you very much for listening today. Whenever you stumble on a puzzle or a speech, smile and remember that every mistake brings you one step closer to mastery. Thank you!", ko: "오늘 들어주셔서 정말 감사합니다. 퍼즐이나 발표에서 실수하더라도 미소 지으며 모든 실수가 우리를 실력 향상에 한 걸음 더 가까이 데려다준다는 걸 기억하세요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 7,
+        audioFile: "audio/speech7.mp3",
+        titleEn: "My Favorite Invention: The Bicycle",
+        titleKo: "내가 가장 좋아하는 발명품: 자전거",
+        lines: [
+          { en: "Good afternoon everyone! Let us talk about cool inventions.", ko: "안녕하세요 여러분! 멋진 발명품에 대해 이야기해 보아요." },
+          { en: "Computers and airplanes are amazing, but I love bicycles.", ko: "컴퓨터와 비행기도 놀랍지만, 저는 자전거를 가장 좋아해요." },
+          { en: "A bicycle is simple, clean, and powered only by our legs.", ko: "자전거는 단순하고 깨끗하며 오직 우리 두 다리의 힘으로 움직여요." },
+          { en: "When I first learned to ride, I wobbled a lot.", ko: "제가 처음 자전거를 배울 때는 정말 많이 흔들렸어요." },
+          { en: "With my dad holding the seat, I kept pedaling forward.", ko: "아빠가 안장을 잡아주시는 동안 저는 계속 페달을 밟았어요." },
+          { en: "Suddenly, I was gliding down the park path with the cool breeze on my face!", ko: "그러다 갑자기 시원한 바람을 맞으며 공원 길을 미끄러지듯 달리고 있었어요!" },
+          { en: "Riding a bike gives our bodies wonderful daily exercise.", ko: "자전거 타기는 우리 몸에 매일 훌륭한 운동을 선물해 줍니다." },
+          { en: "It also helps keep the air fresh without smoke.", ko: "매연이 없어서 공기를 맑게 지키는 데도 도움이 돼요." },
+          { en: "Families can ride together on weekends, explore new trails, and enjoy nature up close.", ko: "주말에 가족이 함께 자전거를 타며 새로운 길을 탐험하고 자연을 가까이서 즐길 수 있어요." },
+          { en: "Just remember to always wear your safety helmet first.", ko: "항상 안전 헬멧을 먼저 쓰는 것만 잊지 마세요." },
+          { en: "Two wheels can carry us to so many happy memories.", ko: "두 바퀴는 우리를 정말 많은 행복한 추억으로 데려다줍니다." },
+          { en: "Thank you for listening to my speech about bicycles. I hope you get to hop on your bike this weekend and feel the joy of rolling into a sunny adventure. Thank you!", ko: "자전거에 대한 제 발표를 들어주셔서 감사합니다. 이번 주말에는 자전거에 올라타 햇살 가득한 모험 속으로 달리는 기쁨을 느껴보시길 바랍니다. 감사합니다!" }
+        ]
+      },
+      {
+        id: 8,
+        audioFile: "audio/speech8.mp3",
+        titleEn: "Healthy Habits for Happy Kids",
+        titleKo: "행복한 어린이를 위한 건강한 습관",
+        lines: [
+          { en: "Hello everybody! How are you feeling today?", ko: "안녕하세요 여러분! 오늘 기분이 어떠신가요?" },
+          { en: "Having good energy helps us play and learn better.", ko: "좋은 에너지를 가지면 더 신나게 놀고 공부도 더 잘할 수 있어요." },
+          { en: "Today, I want to share three easy healthy habits.", ko: "오늘 저는 세 가지 쉬운 건강 습관을 나누고 싶어요." },
+          { en: "Habit number one is eating colorful fruits and vegetables.", ko: "첫 번째 습관은 알록달록한 과일과 채소를 먹는 거예요." },
+          { en: "Crunchy carrots and sweet berries give our bodies natural vitamins.", ko: "아삭한 당근과 달콤한 베리는 우리 몸에 천연 비타민을 주어요." },
+          { en: "Habit number two is moving our bodies outside instead of staring at screens all day.", ko: "두 번째 습관은 하루 종일 화면만 보지 않고 밖에서 몸을 움직이는 거예요." },
+          { en: "Jumping rope or playing tag makes our hearts super strong.", ko: "줄넘기나 술래잡기를 하면 심장이 아주 튼튼해져요." },
+          { en: "Habit number three is getting plenty of sleep at night.", ko: "세 번째 습관은 밤에 충분히 잠을 자는 것입니다." },
+          { en: "While we dream peacefully, our muscles rest and our minds organize everything we learned.", ko: "편안히 꿈을 꾸는 동안 근육은 쉬고 머릿속은 배운 것들을 정리해요." },
+          { en: "Drink lots of water instead of sugary soda too.", ko: "달콤한 탄산음료 대신 물도 많이 마셔 주세요." },
+          { en: "Small daily habits build a bright and healthy future.", ko: "작은 매일의 습관이 밝고 건강한 미래를 만듭니다." },
+          { en: "Thank you so much for listening to my healthy tips. Try adding just one good habit tomorrow morning, and you will feel the amazing difference all day long. Thank you!", ko: "저의 건강 비결을 들어주셔서 정말 감사합니다. 내일 아침부터 좋은 습관 딱 하나만 실천해 보세요. 하루 종일 놀라운 변화를 느낄 수 있을 거예요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 9,
+        audioFile: "audio/speech9.mp3",
+        titleEn: "Music Connects the World",
+        titleKo: "세상을 하나로 잇는 음악",
+        lines: [
+          { en: "Hello everyone! Do you have a favorite song?", ko: "안녕하세요 여러분! 좋아하는 노래가 있나요?" },
+          { en: "Music is everywhere around us, every single day.", ko: "음악은 매일 우리 주변 어디에나 있어요." },
+          { en: "Even when people speak different languages, everyone understands a melody.", ko: "사람들이 서로 다른 언어를 쓰더라도, 누구나 멜로디는 이해할 수 있어요." },
+          { en: "A cheerful tune can make us want to dance immediately.", ko: "신나는 곡조는 우리를 금세 춤추고 싶게 만들어요." },
+          { en: "A soft lullaby helps babies fall asleep calmly at bedtime.", ko: "부드러운 자장가는 아기가 잠자리에 들 때 편안히 잠들도록 도와주어요." },
+          { en: "In school band or choir, students listen to each other to create beautiful harmony.", ko: "학교 합주단이나 합창단에서는 친구들의 소리를 들으며 아름다운 화음을 만들어요." },
+          { en: "Playing an instrument also teaches patience and steady focus.", ko: "악기를 연주하는 것은 인내심과 꾸준한 집중력도 길러줍니다." },
+          { en: "You do not need an expensive piano to make music.", ko: "음악을 만들기 위해 비싼 피아노가 꼭 필요한 것은 아니에요." },
+          { en: "Clapping your hands, humming a rhythm, or singing with friends can fill any room with joy.", ko: "손뼉을 치고, 리듬을 흥얼거리며, 친구들과 함께 노래하면 어느 공간이든 기쁨으로 가득 차요." },
+          { en: "Music helps us express feelings when words are hard.", ko: "음악은 말로 표현하기 어려울 때 우리의 마음을 전하게 해줘요." },
+          { en: "Let us keep singing and sharing songs from every culture.", ko: "여러 문화의 노래를 계속 부르고 함께 나누어 보아요." },
+          { en: "Thank you for listening to my speech about music today. Turn on a happy song on your way home and let the rhythm bring a big smile to your face. Thank you!", ko: "오늘 음악에 관한 제 발표를 들어주셔서 감사합니다. 집에 가는 길에 즐거운 노래를 틀고, 리듬에 맞춰 얼굴에 환한 미소를 지어보세요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 10,
+        audioFile: "audio/speech10.mp3",
+        titleEn: "Saving Energy at Home and School",
+        titleKo: "집과 학교에서 에너지 아끼기",
+        lines: [
+          { en: "Hello friends! Let us become Earth superheroes today.", ko: "안녕 친구들! 오늘 우리 지구 지킴이 슈퍼히어로가 되어 보아요." },
+          { en: "Electricity helps light our classrooms and charge our tablets.", ko: "전기는 교실을 밝히고 태블릿을 충전하는 데 도움을 줘요." },
+          { en: "However, making electricity uses valuable resources from our planet.", ko: "하지만 전기를 만들 때는 우리 지구의 소중한 자원이 사용됩니다." },
+          { en: "That is why saving energy is so important for everyone.", ko: "그래서 모두를 위해 에너지를 절약하는 것이 매우 중요해요." },
+          { en: "Whenever you leave an empty room, click the light switch off.", ko: "빈 방에서 나올 때마다 전등 스위치를 꼭 꺼주세요." },
+          { en: "On sunny mornings, opening the curtains lets natural daylight warm and brighten our space.", ko: "햇살 좋은 아침에는 커튼을 열어 자연 햇빛이 방을 따뜻하고 밝게 비추게 해요." },
+          { en: "Remember to turn off the water tap while brushing teeth.", ko: "양치질을 할 때는 수도꼭지를 잠그는 것도 기억해요." },
+          { en: "Do not leave the refrigerator door hanging open for long.", ko: "냉장고 문을 오랫동안 열어두지 마세요." },
+          { en: "When every family in our neighborhood saves a little power, it protects forests and clean air.", ko: "우리 동네 모든 가족이 조금씩만 전기를 아껴도 숲과 맑은 공기를 지킬 수 있어요." },
+          { en: "Saving energy is an easy habit anyone can practice.", ko: "에너지 절약은 누구나 실천할 수 있는 쉬운 습관이에요." },
+          { en: "Our Earth smiles whenever we use resources wisely.", ko: "우리가 자원을 현명하게 쓸 때마다 지구가 활짝 웃어요." },
+          { en: "Thank you so much for listening carefully today. Let us start right after school by turning off unused lights and being proud protectors of our wonderful planet. Thank you!", ko: "오늘 주의 깊게 들어주셔서 정말 감사합니다. 방과 후 바로 사용하지 않는 불을 끄는 것부터 시작해서, 멋진 지구의 자랑스러운 지킴이가 되어요. 감사합니다!" }
+        ]
+      },
+      {
+        id: 11,
+        audioFile: "audio/speech11.mp3",
+        titleEn: "The Joy of Cooking with Family",
+        titleKo: "가족과 함께하는 요리의 즐거움",
+        lines: [
+          { en: "Hi everyone! Who likes delicious homemade food?", ko: "안녕하세요 여러분! 맛있는 집밥을 좋아하는 사람 있나요?" },
+          { en: "My favorite weekend activity is cooking in the kitchen.", ko: "제가 주말에 가장 좋아하는 활동은 부엌에서 요리하는 거예요." },
+          { en: "Cooking with my family feels like doing fun science experiments.", ko: "가족과 함께 요리하는 것은 재미있는 과학 실험을 하는 기분이에요." },
+          { en: "First, we wash our hands and put on aprons.", ko: "먼저 손을 깨끗이 씻고 앞치마를 매요." },
+          { en: "Then we measure flour, crack eggs, and stir the batter carefully.", ko: "그다음 밀가루를 계량하고 달걀을 깨서 반죽을 조심스럽게 저어요." },
+          { en: "Watching flat pancake batter bubble and turn golden brown in the pan is magic!", ko: "납작한 팬케이크 반죽이 보글보글 올라오며 노릇노릇하게 익는 모습은 마법 같아요!" },
+          { en: "Cooking also teaches us math through cups and spoons.", ko: "요리를 하면 컵과 스푼으로 분량 재면서 수학도 배울 수 있어요." },
+          { en: "Best of all, we get to talk and laugh together.", ko: "무엇보다 좋은 건 함께 이야기하고 웃을 수 있다는 거예요." },
+          { en: "Even if the cookies look slightly funny, homemade snacks always taste extra sweet with love.", ko: "쿠키 모양이 조금 우스꽝스러워도, 직접 만든 간식은 사랑이 담겨서 언제나 훨씬 달콤해요." },
+          { en: "Do not forget to help wash the dishes afterward!", ko: "요리한 뒤에 설거지 돕는 것도 잊지 마세요!" },
+          { en: "Making food together brings our whole family closer.", ko: "함께 음식을 만들면 온 가족이 더 가까워집니다." },
+          { en: "Thank you for listening to my kitchen story today. Ask your parents if you can help stir a soup or toss a salad tonight—you might discover your inner chef! Thank you!", ko: "오늘 저의 부엌 이야기를 들어주셔서 감사합니다. 오늘 밤 부모님께 국을 젓거나 샐러드 버무리는 걸 도와도 되는지 여쭤보세요. 여러분 안의 요리사를 발견할지도 몰라요! 감사합니다!" }
+        ]
+      },
+      {
+        id: 12,
+        audioFile: "audio/speech12.mp3",
+        titleEn: "Becoming a Curious Scientist",
+        titleKo: "호기심 많은 과학자 되기",
+        lines: [
+          { en: "Hello everyone! Ask yourself why the sky is blue.", ko: "안녕하세요 여러분! 하늘은 왜 파랄까 스스로에게 질문해 보세요." },
+          { en: "Curiosity is the greatest superpower a kid can have.", ko: "호기심은 어린이가 가질 수 있는 가장 멋진 초능력이에요." },
+          { en: "When we wonder how things work, we think like scientists.", ko: "사물이 어떻게 작동하는지 궁금해할 때 우리는 과학자처럼 생각하게 돼요." },
+          { en: "Science is not only inside big laboratories with microscopes.", ko: "과학은 현미경이 있는 큰 실험실 안에만 있는 것이 아니에요." },
+          { en: "Science happens when ice melts in your cup of water.", ko: "과학은 물컵 속 얼음이 녹을 때도 일어나고 있어요." },
+          { en: "It happens when a seed sprouts green leaves after a warm spring rain shower.", ko: "따뜻한 봄비가 내린 뒤 씨앗에서 초록 잎이 돋아날 때도 과학이 일어나지요." },
+          { en: "Scientists observe closely, make smart guesses, and test their ideas.", ko: "과학자들은 자세히 관찰하고, 똑똑하게 추측해 보고, 생각을 실험해 봐요." },
+          { en: "Sometimes an experiment works, and sometimes it surprises us.", ko: "때로는 실험이 성공하고, 때로는 우리를 깜짝 놀라게 하기도 해요." },
+          { en: "Every surprise leads to another exciting question and helps us understand nature much better.", ko: "모든 놀라움은 또 다른 신나는 질문으로 이어지고 우리가 자연을 훨씬 잘 이해하게 도와줍니다." },
+          { en: "Never feel shy about asking why or how in class.", ko: "수업 시간에 '왜요?', '어떻게요?'라고 묻는 걸 절대 부끄러워하지 마세요." },
+          { en: "Keep a little notebook for your coolest discoveries.", ko: "가장 멋진 발견들을 적을 작은 공책을 하나 간직해 보세요." },
+          { en: "Thank you very much for listening to my speech today. Stay curious, keep exploring the world around you, and remember that today's curious kids are tomorrow's great scientists. Thank you!", ko: "오늘 제 발표를 들어주셔서 정말 감사합니다. 늘 호기심을 간직하고 주변 세상을 탐험해 보세요. 오늘의 호기심 많은 어린이가 내일의 위대한 과학자가 된답니다. 감사합니다!" }
+        ]
+      }
+    ];
+
+    const STORAGE_KEY_ACTIVE_SPEECH = "starspeech_active_id_v1";
+    const STORAGE_KEY_SCRIPTS_MAP = "starspeech_scripts_map_v1";
+    const STORAGE_KEY_TITLES_MAP = "starspeech_titles_map_v1";
+    const STORAGE_KEY_TIMINGS_MAP = "starspeech_timings_map_v1";
+    const STORAGE_KEY_PROGRESS_MAP = "starspeech_progress_map_v1";
+    const STORAGE_KEY_LANG = "starspeech_lang_v1";
+    const STORAGE_KEY_SPEED = "starspeech_speed_v1";
+    const STORAGE_KEY_PROMPTER_MODE = "starspeech_prompter_mode_v1";
+    const STORAGE_KEY_STAGE = "starspeech_stage_v1";
+    const AUDIO_DB_NAME = "starspeech_audio_db_v1";
+    const AUDIO_STORE_NAME = "speechAudioFiles";
+
+    const EMBEDDED_CONFIG = (() => {
+      try {
+        const el = document.getElementById("embeddedConfigJson");
+        const raw = el ? el.textContent.trim() : "";
+        return raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        return {};
+      }
+    })();
+    let pristineHtmlSnapshot = "";
+
+    // UI Localization Dictionary (English & Korean)
+    const I18N = {
+      en: {
+        pageTitle: "StarSpeech — Kids English Shadowing Studio",
+        navShadowing: "Shadowing Practice",
+        navPuzzle: "Word Puzzle",
+        navShowtime: "Showtime Stage",
+        btnAudioScript: "Audio & Script",
+        speechSelectLabel: "Select Speech (1–12)",
+        activeAudioLabel: "Audio File:",
+        speechOptionFmt: (id, file, titleEn) => `Speech ${String(id).padStart(2, "0")} · ${file} — ${titleEn}`,
+        audioMissingTitleFmt: (file) => `Native audio file <code class="font-mono text-xs bg-amber-100 px-1.5 py-0.5 rounded">${file}</code> was not detected.`,
+        audioMissingDescFmt: (file) => `Save your file at <code class="font-mono text-xs">C:\\public\\speech-studio\\${file.replace(/\//g, "\\")}</code>, load it manually now, or use the built-in preview voice.`,
+        btnLoadAudioFmt: (file) => `Load ${file}`,
+        btnDismiss: "Dismiss",
+        shadowTitle: "Shadowing Practice: Listen & Repeat",
+        shadowDesc: 'Tap <strong class="text-sky-700">Listen</strong> to hear the native speaker, tap <strong class="text-rose-600">Record</strong> to speak the line, then tap <strong class="text-amber-700">Compare</strong> to hear both voices!',
+        starsOutOf: "/ 36 Stars",
+        completedLinesFmt: (n) => `${n} of 12 lines practiced`,
+        speedSlow: "0.8x Slow",
+        speedNormal: "1.0x Normal",
+        playFullSpeech: "Play Full Speech",
+        stopFullSpeech: "Stop Full Speech",
+        speechUnsupported: "Your browser does not support automatic speech scoring. You can still record your voice and compare it directly against the native speaker!",
+        readyStageTitle: "Ready for the big stage?",
+        readyStageDesc: "Warm up with the Word Puzzle or perform all 12 lines on the Showtime Stage.",
+        btnTryPuzzle: "Try Word Puzzle",
+        btnGoShowtime: "Go to Showtime Stage",
+        lineLabel: (n) => `Line ${String(n).padStart(2, "0")}`,
+        practicedBadge: "Practiced &#10003;",
+        btnListen: "Listen / 들어보기",
+        btnPause: "Pause / 일시정지",
+        btnRecord: "Record / 따라하기",
+        btnStopRec: "Stop / 완료하기",
+        btnCompare: "Compare / 내 목소리 비교",
+        compareNative: "1/2 Native Voice...",
+        compareMine: "2/2 Your Voice...",
+        listeningPrompt: "Listening... Speak the sentence out loud!",
+        matchLabel: (p) => `Match: ${p}%`,
+        encourage3: "Awesome! Clear pronunciation!",
+        encourage2: "Great job! Try once more for 3 stars!",
+        encourage1: "Nice effort! Listen closely and try again.",
+        replayNative: "Replay Native",
+        replayMine: "Replay Mine",
+        heardPrefix: "Heard:",
+        micUnavailable: "Microphone is not available in this browser.",
+        micDenied: "Please allow microphone access so we can hear your voice!",
+        micStartErr: "Could not start audio recorder on this device.",
+        recFallbackMsg: "(Voice recorded — tap Compare to listen!)",
+        recNoWordsMsg: "(No clear words detected — try speaking a little louder!)",
+        compareNeedRec: "Tap Record first to save your voice, then tap Compare!",
+        puzzleTitle: "Word Puzzle Warm-Up",
+        puzzleDesc: "Tap or drag the scrambled word blocks into the tray in the right order before practicing out loud.",
+        puzzleSolvedLabel: "Solved:",
+        btnPuzzleListenHint: "Listen Hint / 힌트 듣기",
+        puzzleTrayLabel: "Your Sentence Tray (tap a word to remove it)",
+        puzzleWordsFmt: (a, b) => `${a} / ${b} words`,
+        puzzleTrayEmpty: "Tap or drag words here in the right order...",
+        puzzleBankLabel: "Word Blocks (tap or drag into the tray)",
+        puzzleBankEmpty: "All word blocks placed! Click Check Answer below.",
+        btnPuzzleCheck: "Check Answer / 확인하기",
+        btnPuzzleShuffle: "Shuffle / 다시 섞기",
+        btnPuzzlePracticeOutLoud: "Practice Out Loud \u2192",
+        btnPuzzleNext: "Next Line / 다음 문장",
+        puzzleIncomplete: "Place all word blocks into the tray before checking!",
+        puzzleCorrect: "Correct! Awesome sentence building! Now tap 'Practice Out Loud' to say it!",
+        puzzleAlmost: (idx) => `Almost! Check word #${idx} — tap 'Listen Hint' to hear the sentence order.`,
+        showtimeTitle: "Showtime Stage",
+        showtimeDesc: "Read along with the glowing teleprompter and record your complete 12-line speech performance!",
+        btnPlayNativeTrack: "Play Native Audio Track",
+        btnStopNativeTrack: "Stop Native Track",
+        scrollAuto: "Auto Scroll",
+        scrollManual: "Manual Next",
+        teleprompterLabel: "TELEPROMPTER",
+        showtimeCounterFmt: (n) => `Line ${String(n).padStart(2, "0")} of 12`,
+        onAirLabel: "ON AIR",
+        btnShowtimePrev: "\u2190 Previous",
+        btnShowtimeNext: "Next Line / 다음 문장 \u2192",
+        btnRecFullPerf: "Record Full Performance / 전체 발표 녹음",
+        btnFinishPerf: "Finish Performance / 발표 마치기",
+        showtimeDoneTitle: "Bravo! Full Performance Recorded!",
+        showtimeDoneDesc: "Listen back to your complete speech or save your recording.",
+        btnDownloadAudio: "Download Audio",
+        footerLeft: "StarSpeech &middot; 12-Line English Shadowing Studio",
+        footerRightFmt: (file) => `Works offline with <code class="font-mono">${file}</code> (<code class="font-mono">C:\\public\\speech-studio\\audio\\</code>)`,
+        modalTitle: "Audio Source & 12-Line Script",
+        btnClose: "Close",
+        modalAudioHeadingFmt: (file) => `Native Speaker Audio (<code class="font-mono text-xs">${file}</code>)`,
+        audioLoadedFmt: (file, dur) => `${file} loaded successfully (duration ${dur}).`,
+        audioNotLoadedFmt: (file) => `${file} not loaded yet — using built-in browser voice preview.`,
+        btnChooseAudioFile: "Choose Audio File (.mp3)",
+        modalAudioTipFmt: (file) => `For automatic loading, save the file at <code class="font-mono">C:\\public\\speech-studio\\${file.replace(/\//g, "\\")}</code> (or relative path <code class="font-mono">${file}</code>).`,
+        modalCustomizeTitle: "Script & Audio Timing Setup (Speeches 1–12)",
+        modalCustomizeDesc: "Select speech #1–12, paste the full script at once, and adjust total audio length or per-line start/end seconds.",
+        btnRestoreScript: "Restore Default",
+        modalPickSpeechLabel: "Select Speech Slot (1–12):",
+        modalTitleLabel: "Speech Title:",
+        modalTitlePlaceholder: "Enter title for this speech...",
+        modalTotalDurLabel: "Total Audio Length (sec):",
+        btnAutoFitTimings: "Auto-Fit 12 Segments",
+        btnUseDetectedDurFmt: (sec) => `Use MP3 Length (${sec}s)`,
+        btnEditLineTimings: "Edit Line Times (sec) \u2192",
+        autoChainTimingsLabel: "Auto-connect next line start time when editing end time",
+        btnResetTimingsOnly: "Reset Timings (0–67s)",
+        timingStartLabel: "Start(s)",
+        timingEndLabel: "End(s)",
+        btnTestClip: "Test",
+        timingsFittedToastFmt: (sec) => `12 segments fitted to ${sec}s!`,
+        tabBulkMode: "Bulk Paste (Whole Script)",
+        tabLinesMode: "12-Line & Timing Edit",
+        bulkEnLabel: "Full English Script (paste whole paragraph or 12 lines)",
+        bulkEnPlaceholder: "Paste the entire English speech here (no need to enter line by line)...",
+        btnAutoSplit12: "Auto-Split to 12 Lines",
+        btnClearBulk: "Clear",
+        bulkStatusReady12: "12 lines detected — ready to save!",
+        bulkStatusWillSplitFmt: (lines, sents) => `${lines} block(s) · ${sents} sentence(s) detected — will auto-split into 12 timed lines on save.`,
+        bulkStatusEmpty: "Paste your speech text above to generate 12 practice lines.",
+        bulkNeedTextWarn: "Please enter the English speech text before saving.",
+        modalSavedToastFmt: (id) => `Speech #${id} saved!`,
+        btnSaveStay: "Save This Speech",
+        btnRevertDefaultAudio: "Use Default Path",
+        audioSavedCustomFmt: (name, dur) => `Saved custom audio: ${name} (duration ${dur})`,
+        audioCustomSavedToastFmt: (id, name) => `Saved ${name} for Speech #${id}!`,
+        modalBackupTitle: "Save Into Standalone index.html / Backup (.json)",
+        modalBackupDesc: "Edits saved in a web preview stay in that browser. Download \"Configured index.html\" to embed all 12 saved speeches & timings inside index.html for C:\\public\\speech-studio\\.",
+        btnDownloadConfiguredHtml: "Download Configured index.html",
+        configuredHtmlToast: "Downloaded index.html with all 12 saved speeches embedded!",
+        btnExportBackup: "Export Backup (.json)",
+        btnImportBackup: "Import Backup",
+        backupImportedToast: "All 12 speech settings restored from backup!",
+        backupInvalidWarn: "Invalid backup JSON file.",
+        modalResetTitle: "Reset Stars & Recordings",
+        modalResetDesc: "Clears earned stars, puzzle progress, and voice recordings for this speech.",
+        btnResetProgress: "Reset Progress",
+        btnConfirmReset: "Yes, Reset All",
+        btnCancel: "Cancel",
+        btnSaveScript: "Save & Close"
+      },
+      ko: {
+        pageTitle: "StarSpeech — 어린이 영어 쉐도잉 스튜디오",
+        navShadowing: "쉐도잉 연습",
+        navPuzzle: "단어 퍼즐",
+        navShowtime: "발표 무대",
+        btnAudioScript: "오디오 & 대본",
+        speechSelectLabel: "스피치 원고 선택 (1~12번)",
+        activeAudioLabel: "음성 파일:",
+        speechOptionFmt: (id, file, titleEn, titleKo) => `${id}번 원고 · ${file} — ${titleKo}`,
+        audioMissingTitleFmt: (file) => `원어민 음성 파일(<code class="font-mono text-xs bg-amber-100 px-1.5 py-0.5 rounded">${file}</code>)을 불러오지 못했습니다.`,
+        audioMissingDescFmt: (file) => `<code class="font-mono text-xs">C:\\public\\speech-studio\\${file.replace(/\//g, "\\")}</code> 경로에 파일을 두거나 지금 직접 선택할 수 있어요. 기본 미리듣기 음성으로도 바로 연습 가능합니다.`,
+        btnLoadAudioFmt: (file) => `${file} 불러오기`,
+        btnDismiss: "닫기",
+        shadowTitle: "쉐도잉 연습: 듣고 따라 말하기",
+        shadowDesc: '<strong class="text-sky-700">들어보기</strong>를 눌러 원어민 발음을 듣고, <strong class="text-rose-600">따라하기</strong>를 눌러 말한 뒤, <strong class="text-amber-700">내 목소리 비교</strong>로 함께 들어보세요!',
+        starsOutOf: "/ 36 별",
+        completedLinesFmt: (n) => `12문장 중 ${n}문장 연습 완료`,
+        speedSlow: "0.8x 느리게",
+        speedNormal: "1.0x 보통",
+        playFullSpeech: "전체 음성 듣기",
+        stopFullSpeech: "전체 음성 멈추기",
+        speechUnsupported: "현재 브라우저는 자동 발음 채점을 지원하지 않지만, 녹음 후 원어민 목소리와 직접 비교하며 연습할 수 있어요!",
+        readyStageTitle: "이제 큰 무대에 설 준비가 되었나요?",
+        readyStageDesc: "단어 퍼즐로 워밍업하거나 발표 무대에서 12문장 전체를 멋지게 발표해 보세요.",
+        btnTryPuzzle: "단어 퍼즐 해보기",
+        btnGoShowtime: "발표 무대 가기",
+        lineLabel: (n) => `문장 ${String(n).padStart(2, "0")}`,
+        practicedBadge: "연습 완료 &#10003;",
+        btnListen: "들어보기",
+        btnPause: "일시정지",
+        btnRecord: "따라하기",
+        btnStopRec: "완료하기",
+        btnCompare: "내 목소리 비교",
+        compareNative: "1/2 원어민 음성...",
+        compareMine: "2/2 내 목소리...",
+        listeningPrompt: "듣고 있어요... 문장을 큰 소리로 따라 읽어보세요!",
+        matchLabel: (p) => `일치율: ${p}%`,
+        encourage3: "최고예요! 발음이 아주 정확해요!",
+        encourage2: "잘했어요! 한 번 더 도전해서 별 3개를 모아보세요!",
+        encourage1: "좋은 시도예요! 다시 잘 듣고 또박또박 따라해 보세요.",
+        replayNative: "원어민 다시듣기",
+        replayMine: "내 목소리 다시듣기",
+        heardPrefix: "인식된 말:",
+        micUnavailable: "이 브라우저에서는 마이크를 사용할 수 없습니다.",
+        micDenied: "목소리를 들을 수 있도록 마이크 권한을 허용해 주세요!",
+        micStartErr: "이 기기에서 오디오 녹음을 시작할 수 없습니다.",
+        recFallbackMsg: "(녹음 완료 — '내 목소리 비교'를 눌러 들어보세요!)",
+        recNoWordsMsg: "(목소리가 잘 들리지 않았어요 — 조금 더 크게 말해 보세요!)",
+        compareNeedRec: "먼저 '따라하기'를 눌러 녹음한 뒤 비교해 보세요!",
+        puzzleTitle: "단어 퍼즐 워밍업",
+        puzzleDesc: "큰 소리로 말하기 전에 섞여 있는 단어 블록을 탭하거나 끌어다 올바른 순서대로 문장을 만들어 보세요.",
+        puzzleSolvedLabel: "완료:",
+        btnPuzzleListenHint: "힌트 듣기",
+        puzzleTrayLabel: "문장 완성 상자 (단어를 누르면 다시 내려갑니다)",
+        puzzleWordsFmt: (a, b) => `${a} / ${b} 단어`,
+        puzzleTrayEmpty: "단어를 누르거나 여기로 끌어다 순서대로 놓아보세요...",
+        puzzleBankLabel: "단어 블록 (누르거나 위 상자로 끌어다 놓으세요)",
+        puzzleBankEmpty: "모든 단어를 놓았어요! 아래 '확인하기'를 눌러보세요.",
+        btnPuzzleCheck: "확인하기",
+        btnPuzzleShuffle: "다시 섞기",
+        btnPuzzlePracticeOutLoud: "큰 소리로 연습하기 \u2192",
+        btnPuzzleNext: "다음 문장",
+        puzzleIncomplete: "확인하기 전에 모든 단어 블록을 상자에 올려놓아 주세요!",
+        puzzleCorrect: "정답이에요! 아주 잘 만들었어요! 이제 '큰 소리로 연습하기'를 눌러 말해보세요!",
+        puzzleAlmost: (idx) => `아쉬워요! ${idx}번째 단어를 확인해 보세요 — '힌트 듣기'로 순서를 들어볼 수 있어요.`,
+        showtimeTitle: "쇼타임 발표 무대",
+        showtimeDesc: "프롬프터의 글자를 보며 12문장 전체 영어 발표를 멋지게 녹음해 보세요!",
+        btnPlayNativeTrack: "원어민 배경음 재생",
+        btnStopNativeTrack: "배경음 멈추기",
+        scrollAuto: "자동 스크롤",
+        scrollManual: "수동 넘기기",
+        teleprompterLabel: "프롬프터",
+        showtimeCounterFmt: (n) => `12문장 중 ${String(n).padStart(2, "0")}번`,
+        onAirLabel: "녹음 중",
+        btnShowtimePrev: "\u2190 이전 문장",
+        btnShowtimeNext: "다음 문장 \u2192",
+        btnRecFullPerf: "전체 발표 녹음하기",
+        btnFinishPerf: "발표 마치기",
+        showtimeDoneTitle: "브라보! 전체 발표가 녹음되었어요!",
+        showtimeDoneDesc: "녹음된 전체 발표를 다시 들어보거나 파일로 저장해 보세요.",
+        btnDownloadAudio: "녹음 파일 저장",
+        footerLeft: "StarSpeech &middot; 어린이 영어 쉐도잉 스튜디오",
+        footerRightFmt: (file) => `<code class="font-mono">${file}</code> (<code class="font-mono">C:\\public\\speech-studio\\audio\\</code>) 경로에서 오프라인 작동`,
+        modalTitle: "오디오 파일 & 12문장 대본 설정",
+        btnClose: "닫기",
+        modalAudioHeadingFmt: (file) => `원어민 음성 파일 (<code class="font-mono text-xs">${file}</code>)`,
+        audioLoadedFmt: (file, dur) => `${file} 파일을 정상적으로 불러왔습니다 (길이 ${dur}).`,
+        audioNotLoadedFmt: (file) => `${file} 파일이 아직 연결되지 않아 기본 미리듣기 음성을 사용 중입니다.`,
+        btnChooseAudioFile: "오디오 파일 선택 (.mp3)",
+        modalAudioTipFmt: (file) => `자동으로 불러오려면 <code class="font-mono">C:\\public\\speech-studio\\${file.replace(/\//g, "\\")}</code> 경로(상대 경로 <code class="font-mono">${file}</code>)에 파일을 저장해 주세요.`,
+        modalCustomizeTitle: "12개 원고 대본 및 음성 길이 설정란",
+        modalCustomizeDesc: "1~12번 원고를 선택해 문장을 통째로 넣고, 전체 음성 길이(초) 또는 문장별 시작·종료 시간을 자유롭게 수정하세요.",
+        btnRestoreScript: "기본 대본·시간 복원",
+        modalPickSpeechLabel: "원고 번호 선택 (1~12번):",
+        modalTitleLabel: "원고 제목:",
+        modalTitlePlaceholder: "이 원고의 제목을 입력하세요...",
+        modalTotalDurLabel: "전체 음성 길이 (초):",
+        btnAutoFitTimings: "원고 비율로 자동 배분",
+        btnUseDetectedDurFmt: (sec) => `파일 길이 적용 (${sec}초)`,
+        btnEditLineTimings: "문장별 시간(초) 직접 수정 \u2192",
+        autoChainTimingsLabel: "종료 시간 수정 시 다음 문장 시작 시간 자동 연결",
+        btnResetTimingsOnly: "시간만 기본값(0~67초)으로",
+        timingStartLabel: "시작(초)",
+        timingEndLabel: "종료(초)",
+        btnTestClip: "구간 듣기",
+        timingsFittedToastFmt: (sec) => `총 ${sec}초 길이에 맞춰 12구간 자동 배분 완료!`,
+        tabBulkMode: "통문장 한 번에 입력",
+        tabLinesMode: "12줄 · 음성구간(초) 수정",
+        bulkEnLabel: "영어 원고 전체 입력 (문단 통으로 붙여넣기 또는 12줄 입력)",
+        bulkEnPlaceholder: "여기에 영어 스피치 원고 전체를 통째로 붙여넣으세요 (한 줄씩 입력할 필요 없음)...",
+        btnAutoSplit12: "12줄로 자동 나누기",
+        btnClearBulk: "비우기",
+        bulkStatusReady12: "12줄 감지 완료 ✓ — 바로 저장할 수 있습니다.",
+        bulkStatusWillSplitFmt: (lines, sents) => `현재 ${lines}줄 · ${sents}문장 감지됨 → 저장 시 12개 구간(0초~67초)으로 자동 분할됩니다.`,
+        bulkStatusEmpty: "위 입력란에 원고 전체 문장을 붙여넣으면 12개 연습 문장으로 자동 생성됩니다.",
+        bulkNeedTextWarn: "저장하기 전에 영어 원고 문장을 입력해 주세요.",
+        modalSavedToastFmt: (id) => `${id}번 원고 저장 완료 ✓`,
+        btnSaveStay: "이 원고 저장",
+        btnRevertDefaultAudio: "기본 경로 사용",
+        audioSavedCustomFmt: (name, dur) => `저장된 음성 파일 연결됨: ${name} (길이 ${dur})`,
+        audioCustomSavedToastFmt: (id, name) => `${id}번 원고 음성 파일(${name}) 저장 완료 ✓`,
+        modalBackupTitle: "저장된 12개 원고가 포함된 index.html 다운로드 · 백업",
+        modalBackupDesc: "웹에서 입력한 원고는 현재 브라우저에만 저장되므로, 파일을 다운받아 로컬(C:\\public\\speech-studio\\index.html)로 여실 때는 아래 버튼으로 내 원고가 담긴 HTML 파일을 내려받으세요.",
+        btnDownloadConfiguredHtml: "내 원고가 포함된 index.html 다운로드",
+        configuredHtmlToast: "저장된 12개 원고가 포함된 index.html을 다운로드했습니다 ✓",
+        btnExportBackup: "백업 저장 (.json)",
+        btnImportBackup: "백업 불러오기",
+        backupImportedToast: "백업 파일에서 12개 원고 설정을 복원했습니다 ✓",
+        backupInvalidWarn: "올바른 백업 JSON 파일이 아닙니다.",
+        modalResetTitle: "별 점수 & 녹음 초기화",
+        modalResetDesc: "현재 선택한 원고의 별 점수, 퍼즐 기록, 녹음된 음성을 모두 지웁니다.",
+        btnResetProgress: "진행 기록 초기화",
+        btnConfirmReset: "네, 모두 초기화",
+        btnCancel: "취소",
+        btnSaveScript: "저장 후 닫기"
+      }
+    };
+
+    function t(key, ...args) {
+      const dict = I18N[uiLang] || I18N.en;
+      const val = dict[key] !== undefined ? dict[key] : I18N.en[key];
+      return typeof val === "function" ? val(...args) : val;
+    }
+
+    // Application State
+    let uiLang = loadSavedLang();
+    let currentSpeechId = loadActiveSpeechId();
+    let audioTimings = loadSavedTimings(currentSpeechId);
+    let scriptLines = loadSavedScript(currentSpeechId);
+    let progressState = loadSavedProgress(currentSpeechId); // { stars: [0..3 x12], solvedPuzzles: [bool x12] }
+    const recordingsBySpeech = {}; // { [speechId]: Array(12) }
+    let lineRecordings = getSessionRecordings(currentSpeechId);
+    const customAudioUrls = {}; // { [speechId]: objectUrl }
+    const customAudioNames = {}; // { [speechId]: fileName }
+
+    let currentStage = loadSavedStage();
+    let playbackRate = loadSavedSpeed();
+    let audioReady = false;
+    let audioCheckPending = true;
+    let audioNoticeDismissed = false;
+    let audioLoadCheckTimer = null;
+    let audioFallbackAttempted = false;
+
+    // Active playback tracking
+    let activeAudioMode = null; // 'line' | 'compare-native' | 'compare-mine' | 'all-shadow' | 'showtime-bg'
+    let activeLineIndex = null;
+    let activeSegmentEnd = null;
+    let activeSegmentStart = null;
+    let activeSegmentDoneCb = null;
+    let playbackWatcherId = null;
+    let userCompareAudio = new Audio();
+    let compareDelayTimer = null;
+
+    // Active recording tracking
+    let recordingLineIndex = null;
+    let mediaRecorder = null;
+    let mediaStream = null;
+    let recordedChunks = [];
+    let speechRecognition = null;
+    let latestTranscript = "";
+    let recordingStartTime = 0;
+
+    // Showtime Stage tracking
+    let showtimeIndex = 0;
+    let teleprompterMode = loadSavedPrompterMode(); // 'auto' | 'manual'
+    let showtimeAutoTimer = null;
+    let showtimePlayingBg = false;
+    let isRecordingFullPerf = false;
+    let fullPerfRecorder = null;
+    let fullPerfStream = null;
+    let fullPerfChunks = [];
+    let fullPerfTimerId = null;
+    let fullPerfStartMs = 0;
+    let fullPerfUrl = null;
+
+    // Word Puzzle tracking
+    let puzzleIndex = 0;
+    let puzzleBankTokens = [];   // [{ id, text }]
+    let puzzleTrayTokens = [];   // [{ id, text }]
+    let draggedToken = null;     // { id, from: 'bank'|'tray' }
+
+    const nativeAudio = document.getElementById("nativeAudio");
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    // =========================================================
+    // INITIALIZATION, SPEECH SWITCHER & PERSISTENCE
+    // =========================================================
+    function getActiveAudioFilename(id = currentSpeechId) {
+      return `audio/speech${id}.mp3`;
+    }
+
+    function getAbsoluteAudioFallbackUrl(id = currentSpeechId) {
+      return `${LOCAL_STUDIO_AUDIO_BASE}${getActiveAudioFilename(id)}`;
+    }
+
+    function getSessionRecordings(speechId) {
+      if (!recordingsBySpeech[speechId]) {
+        recordingsBySpeech[speechId] = Array(12).fill(null);
+      }
+      return recordingsBySpeech[speechId];
+    }
+
+    function loadSavedLang() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_LANG);
+        if (saved === "ko" || saved === "en") return saved;
+      } catch (_) {}
+      if (EMBEDDED_CONFIG.lang === "ko" || EMBEDDED_CONFIG.lang === "en") return EMBEDDED_CONFIG.lang;
+      return "en";
+    }
+
+    function loadActiveSpeechId() {
+      try {
+        const saved = Number(localStorage.getItem(STORAGE_KEY_ACTIVE_SPEECH));
+        if (saved >= 1 && saved <= 12) return saved;
+      } catch (_) {}
+      const emb = Number(EMBEDDED_CONFIG.activeSpeechId);
+      if (emb >= 1 && emb <= 12) return emb;
+      return 1;
+    }
+
+    function loadSavedSpeed() {
+      try {
+        const saved = Number(localStorage.getItem(STORAGE_KEY_SPEED));
+        if (saved === 0.8 || saved === 1.0) return saved;
+      } catch (_) {}
+      const emb = Number(EMBEDDED_CONFIG.speed);
+      if (emb === 0.8 || emb === 1.0) return emb;
+      return 1.0;
+    }
+
+    function loadSavedPrompterMode() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_PROMPTER_MODE);
+        if (saved === "auto" || saved === "manual") return saved;
+      } catch (_) {}
+      if (EMBEDDED_CONFIG.prompterMode === "auto" || EMBEDDED_CONFIG.prompterMode === "manual") return EMBEDDED_CONFIG.prompterMode;
+      return "auto";
+    }
+
+    function loadSavedStage() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_STAGE);
+        if (saved === "shadowing" || saved === "puzzle" || saved === "showtime") return saved;
+      } catch (_) {}
+      if (EMBEDDED_CONFIG.stage === "shadowing" || EMBEDDED_CONFIG.stage === "puzzle" || EMBEDDED_CONFIG.stage === "showtime") {
+        return EMBEDDED_CONFIG.stage;
+      }
+      return "shadowing";
+    }
+
+    // IndexedDB persistence for user-selected MP3 files per speech (1-12)
+    function openAudioDb() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error("IndexedDB unavailable"));
+          return;
+        }
+        const req = window.indexedDB.open(AUDIO_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(AUDIO_STORE_NAME)) {
+            db.createObjectStore(AUDIO_STORE_NAME, { keyPath: "speechId" });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function savePersistedAudioBlob(speechId, fileName, blob) {
+      try {
+        const db = await openAudioDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(AUDIO_STORE_NAME, "readwrite");
+          tx.objectStore(AUDIO_STORE_NAME).put({ speechId: Number(speechId), fileName, blob, updatedAt: Date.now() });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      } catch (_) {}
+    }
+
+    async function loadPersistedAudioBlob(speechId) {
+      try {
+        const db = await openAudioDb();
+        const record = await new Promise((resolve, reject) => {
+          const tx = db.transaction(AUDIO_STORE_NAME, "readonly");
+          const req = tx.objectStore(AUDIO_STORE_NAME).get(Number(speechId));
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+        db.close();
+        return record;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function deletePersistedAudioBlob(speechId) {
+      try {
+        const db = await openAudioDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(AUDIO_STORE_NAME, "readwrite");
+          tx.objectStore(AUDIO_STORE_NAME).delete(Number(speechId));
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      } catch (_) {}
+    }
+
+    function setUiLang(lang) {
+      if (lang !== "en" && lang !== "ko") return;
+      uiLang = lang;
+      try {
+        localStorage.setItem(STORAGE_KEY_LANG, lang);
+      } catch (_) {}
+      applyTranslations();
+    }
+
+    function getSpeechTitle(speechId, lang = uiLang) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_TITLES_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          if (map && typeof map[String(speechId)] === "string" && map[String(speechId)].trim()) {
+            return map[String(speechId)].trim();
+          }
+        }
+      } catch (_) {}
+      const embTitle = EMBEDDED_CONFIG.titles && EMBEDDED_CONFIG.titles[String(speechId)];
+      if (typeof embTitle === "string" && embTitle.trim()) {
+        return embTitle.trim();
+      }
+      const sp = SPEECH_LIBRARY.find(s => s.id === speechId) || SPEECH_LIBRARY[0];
+      return lang === "ko" ? sp.titleKo : sp.titleEn;
+    }
+
+    function hasCustomScript(speechId) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_SCRIPTS_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          if (map && Array.isArray(map[String(speechId)])) return true;
+        }
+      } catch (_) {}
+      return Boolean(EMBEDDED_CONFIG.scripts && Array.isArray(EMBEDDED_CONFIG.scripts[String(speechId)]));
+    }
+
+    function renderSpeechSelector() {
+      const sel = document.getElementById("speechSelector");
+      if (!sel) return;
+      sel.innerHTML = SPEECH_LIBRARY.map(sp => {
+        const titleEn = getSpeechTitle(sp.id, "en");
+        const titleKo = getSpeechTitle(sp.id, "ko");
+        const label = t("speechOptionFmt", sp.id, sp.audioFile, titleEn, titleKo);
+        return `<option value="${sp.id}" ${sp.id === currentSpeechId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      }).join("");
+      const badge = document.getElementById("activeAudioFilename");
+      if (badge) badge.textContent = getActiveAudioFilename();
+    }
+
+    function selectSpeech(speechId) {
+      const id = Math.max(1, Math.min(12, Number(speechId) || 1));
+      stopAllPlayback();
+      if (recordingLineIndex !== null) stopLineRecording();
+      if (isRecordingFullPerf) stopFullPerformanceRecording();
+
+      currentSpeechId = id;
+      try {
+        localStorage.setItem(STORAGE_KEY_ACTIVE_SPEECH, String(id));
+      } catch (_) {}
+
+      audioTimings = loadSavedTimings(id);
+      scriptLines = loadSavedScript(id);
+      progressState = loadSavedProgress(id);
+      lineRecordings = getSessionRecordings(id);
+      showtimeIndex = 0;
+      audioNoticeDismissed = false;
+
+      loadAudioForSpeech(id);
+      renderSpeechSelector();
+      updateAudioStatusUI();
+      updateSummaryMetrics();
+      renderShadowingLines();
+      initPuzzleForLine(0);
+      renderShowtimeTeleprompter();
+    }
+
+    function scheduleAudioReadyCheck() {
+      if (audioLoadCheckTimer) {
+        clearTimeout(audioLoadCheckTimer);
+        audioLoadCheckTimer = null;
+      }
+      audioLoadCheckTimer = setTimeout(() => {
+        audioCheckPending = false;
+        if (nativeAudio.error || nativeAudio.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+          audioReady = false;
+        } else if (nativeAudio.readyState >= 1) {
+          audioReady = true;
+        }
+        updateAudioStatusUI();
+      }, 750);
+    }
+
+    async function loadAudioForSpeech(id) {
+      audioReady = false;
+      audioCheckPending = true;
+      audioFallbackAttempted = false;
+
+      if (!customAudioUrls[id]) {
+        const savedAudio = await loadPersistedAudioBlob(id);
+        if (id !== currentSpeechId) return;
+        if (savedAudio && savedAudio.blob) {
+          customAudioUrls[id] = URL.createObjectURL(savedAudio.blob);
+          customAudioNames[id] = savedAudio.fileName || getActiveAudioFilename(id);
+        }
+      }
+
+      if (id !== currentSpeechId) return;
+      const targetSrc = customAudioUrls[id] || getActiveAudioFilename(id);
+      nativeAudio.src = targetSrc;
+      nativeAudio.load();
+      scheduleAudioReadyCheck();
+    }
+
+    function applyTranslations() {
+      document.documentElement.lang = uiLang;
+      document.title = t("pageTitle");
+
+      // Update header language toggle pill buttons
+      const enBtn = document.getElementById("langBtnEn");
+      const koBtn = document.getElementById("langBtnKo");
+      if (enBtn && koBtn) {
+        if (uiLang === "en") {
+          enBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors";
+          koBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors";
+        } else {
+          koBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors";
+          enBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors";
+        }
+      }
+
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        const val = t(key);
+        if (typeof val === "string") el.textContent = val;
+      });
+      document.querySelectorAll("[data-i18n-html]").forEach(el => {
+        const key = el.getAttribute("data-i18n-html");
+        const val = t(key);
+        if (typeof val === "string") el.innerHTML = val;
+      });
+
+      renderSpeechSelector();
+      updateAudioStatusUI();
+      updatePlayAllButtonUI();
+      updateShowtimeBgButtonUI();
+      updateSummaryMetrics();
+      renderShadowingLines();
+      renderPuzzleWorkspace();
+      renderShowtimeTeleprompter();
+
+      const recFullLabel = document.getElementById("recordFullPerfLabel");
+      if (recFullLabel) {
+        recFullLabel.textContent = isRecordingFullPerf ? t("btnFinishPerf") : t("btnRecFullPerf");
+      }
+    }
+
+    function roundSec(val) {
+      return Math.max(0, Math.round((Number(val) || 0) * 10) / 10);
+    }
+
+    function normalizeTimingsArray(arr) {
+      if (!Array.isArray(arr) || arr.length !== 12) {
+        return DEFAULT_AUDIO_TIMINGS.map(tm => ({ ...tm }));
+      }
+      return arr.map((tm, i) => {
+        const fallback = DEFAULT_AUDIO_TIMINGS[i];
+        const start = Number.isFinite(Number(tm && tm.start)) ? roundSec(tm.start) : fallback.start;
+        let end = Number.isFinite(Number(tm && tm.end)) ? roundSec(tm.end) : fallback.end;
+        if (end <= start) end = roundSec(start + 0.5);
+        return { start, end };
+      });
+    }
+
+    function loadSavedTimings(speechId = currentSpeechId) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_TIMINGS_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          const custom = map && map[String(speechId)];
+          if (Array.isArray(custom) && custom.length === 12) {
+            return normalizeTimingsArray(custom);
+          }
+        }
+      } catch (_) {}
+      const emb = EMBEDDED_CONFIG.timings && EMBEDDED_CONFIG.timings[String(speechId)];
+      if (Array.isArray(emb) && emb.length === 12) {
+        return normalizeTimingsArray(emb);
+      }
+      return DEFAULT_AUDIO_TIMINGS.map(tm => ({ ...tm }));
+    }
+
+    function loadSavedScript(speechId = currentSpeechId) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_SCRIPTS_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          const custom = map && map[String(speechId)];
+          if (Array.isArray(custom) && custom.length === 12 && custom.every(item => item && typeof item.en === "string")) {
+            return custom;
+          }
+        }
+      } catch (_) {}
+      const emb = EMBEDDED_CONFIG.scripts && EMBEDDED_CONFIG.scripts[String(speechId)];
+      if (Array.isArray(emb) && emb.length === 12 && emb.every(item => item && typeof item.en === "string")) {
+        return emb.map(item => ({ ...item }));
+      }
+      const entry = SPEECH_LIBRARY.find(s => s.id === speechId) || SPEECH_LIBRARY[0];
+      return entry.lines.map(item => ({ ...item }));
+    }
+
+    function loadSavedProgress(speechId = currentSpeechId) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_PROGRESS_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          const entry = map && map[String(speechId)];
+          if (entry && Array.isArray(entry.stars) && entry.stars.length === 12) {
+            return {
+              stars: entry.stars.map(n => Math.max(0, Math.min(3, Number(n) || 0))),
+              solvedPuzzles: Array.isArray(entry.solvedPuzzles) && entry.solvedPuzzles.length === 12
+                ? entry.solvedPuzzles.map(Boolean)
+                : Array(12).fill(false)
+            };
+          }
+        }
+      } catch (_) {}
+      const embEntry = EMBEDDED_CONFIG.progress && EMBEDDED_CONFIG.progress[String(speechId)];
+      if (embEntry && Array.isArray(embEntry.stars) && embEntry.stars.length === 12) {
+        return {
+          stars: embEntry.stars.map(n => Math.max(0, Math.min(3, Number(n) || 0))),
+          solvedPuzzles: Array.isArray(embEntry.solvedPuzzles) && embEntry.solvedPuzzles.length === 12
+            ? embEntry.solvedPuzzles.map(Boolean)
+            : Array(12).fill(false)
+        };
+      }
+      return {
+        stars: Array(12).fill(0),
+        solvedPuzzles: Array(12).fill(false)
+      };
+    }
+
+    function saveProgress() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_PROGRESS_MAP);
+        const map = raw ? JSON.parse(raw) : {};
+        map[String(currentSpeechId)] = {
+          stars: progressState.stars,
+          solvedPuzzles: progressState.solvedPuzzles
+        };
+        localStorage.setItem(STORAGE_KEY_PROGRESS_MAP, JSON.stringify(map));
+      } catch (_) {}
+    }
+
+    function initApp() {
+      // Detect Web Speech API support
+      if (!SpeechRecognitionAPI) {
+        document.getElementById("speechSupportNotice").classList.remove("hidden");
+      }
+
+      // Wire nativeAudio events
+      nativeAudio.addEventListener("loadedmetadata", () => {
+        audioReady = true;
+        audioCheckPending = false;
+        updateAudioStatusUI();
+        if (!document.getElementById("setupModal")?.classList.contains("hidden")) {
+          refreshModalDurationControls();
+        }
+      });
+      nativeAudio.addEventListener("canplay", () => {
+        audioReady = true;
+        audioCheckPending = false;
+        updateAudioStatusUI();
+      });
+      nativeAudio.addEventListener("error", () => {
+        if (!customAudioUrls[currentSpeechId] && !audioFallbackAttempted && window.location.protocol === "file:") {
+          audioFallbackAttempted = true;
+          audioCheckPending = true;
+          nativeAudio.src = getAbsoluteAudioFallbackUrl(currentSpeechId);
+          nativeAudio.load();
+          scheduleAudioReadyCheck();
+          return;
+        }
+        audioReady = false;
+        audioCheckPending = false;
+        updateAudioStatusUI();
+      });
+
+      loadAudioForSpeech(currentSpeechId);
+      setPlaybackRate(playbackRate);
+      setTeleprompterMode(teleprompterMode);
+      initPuzzleForLine(0);
+      applyTranslations();
+      if (currentStage !== "shadowing") {
+        switchStage(currentStage);
+      }
+    }
+
+    function updateAudioStatusUI() {
+      const targetId = (!document.getElementById("setupModal")?.classList.contains("hidden")) ? modalEditingSpeechId : currentSpeechId;
+      const fileName = getActiveAudioFilename();
+      const modalFileName = getActiveAudioFilename(targetId);
+      const banner = document.getElementById("audioNoticeBanner");
+      const modalStatus = document.getElementById("modalAudioStatus");
+      const clearAudioBtn = document.getElementById("btnClearCustomAudio");
+      const missingTitleEl = document.getElementById("audioMissingTitleEl");
+      const missingDescEl = document.getElementById("audioMissingDescEl");
+      const loadBtnLabel = document.getElementById("btnLoadAudioLabel");
+      const modalHeadingEl = document.getElementById("modalAudioHeadingEl");
+      const modalTipEl = document.getElementById("modalAudioTipEl");
+      const footerRightEl = document.querySelector('[data-i18n-html="footerRight"]');
+
+      if (missingTitleEl) missingTitleEl.innerHTML = t("audioMissingTitleFmt", fileName);
+      if (missingDescEl) missingDescEl.innerHTML = t("audioMissingDescFmt", fileName);
+      if (loadBtnLabel) loadBtnLabel.textContent = t("btnLoadAudioFmt", fileName);
+      if (modalHeadingEl) modalHeadingEl.innerHTML = t("modalAudioHeadingFmt", modalFileName);
+      if (modalTipEl) modalTipEl.innerHTML = t("modalAudioTipFmt", modalFileName);
+      if (footerRightEl) footerRightEl.innerHTML = t("footerRightFmt", fileName);
+
+      if (clearAudioBtn) {
+        if (customAudioUrls[targetId]) {
+          clearAudioBtn.classList.remove("hidden");
+        } else {
+          clearAudioBtn.classList.add("hidden");
+        }
+      }
+
+      if (audioReady || audioCheckPending) {
+        banner.classList.add("hidden");
+      } else if (!audioNoticeDismissed) {
+        banner.classList.remove("hidden");
+      }
+
+      if (targetId === currentSpeechId) {
+        if (audioReady) {
+          const dur = isFinite(nativeAudio.duration) ? formatSec(Math.round(nativeAudio.duration)) : "1:07";
+          modalStatus.textContent = customAudioNames[targetId]
+            ? t("audioSavedCustomFmt", customAudioNames[targetId], dur)
+            : t("audioLoadedFmt", modalFileName, dur);
+          modalStatus.className = "text-xs font-semibold text-emerald-700 mt-0.5";
+        } else {
+          modalStatus.textContent = t("audioNotLoadedFmt", modalFileName);
+          modalStatus.className = "text-xs font-semibold text-amber-700 mt-0.5";
+        }
+      } else if (customAudioNames[targetId]) {
+        modalStatus.textContent = t("audioSavedCustomFmt", customAudioNames[targetId], "--:--");
+        modalStatus.className = "text-xs font-semibold text-emerald-700 mt-0.5";
+      } else {
+        modalStatus.textContent = t("audioNotLoadedFmt", modalFileName);
+        modalStatus.className = "text-xs font-semibold text-slate-600 mt-0.5";
+      }
+    }
+
+    function dismissAudioNotice() {
+      audioNoticeDismissed = true;
+      document.getElementById("audioNoticeBanner").classList.add("hidden");
+    }
+
+    async function handleAudioFileUpload(event, fromModal = false) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const targetId = fromModal ? modalEditingSpeechId : currentSpeechId;
+      if (customAudioUrls[targetId]) {
+        URL.revokeObjectURL(customAudioUrls[targetId]);
+      }
+      const objUrl = URL.createObjectURL(file);
+      customAudioUrls[targetId] = objUrl;
+      customAudioNames[targetId] = file.name;
+      await savePersistedAudioBlob(targetId, file.name, file);
+
+      if (targetId === currentSpeechId) {
+        nativeAudio.src = objUrl;
+        nativeAudio.load();
+        audioNoticeDismissed = false;
+        nativeAudio.addEventListener("loadedmetadata", function onLoad() {
+          audioReady = true;
+          updateAudioStatusUI();
+          if (!document.getElementById("setupModal")?.classList.contains("hidden")) {
+            refreshModalDurationControls();
+          }
+          nativeAudio.removeEventListener("loadedmetadata", onLoad);
+        });
+      } else {
+        updateAudioStatusUI();
+        if (fromModal) {
+          showModalToast(t("audioCustomSavedToastFmt", targetId, file.name));
+        }
+      }
+      event.target.value = "";
+    }
+
+    async function clearSavedCustomAudio() {
+      const targetId = modalEditingSpeechId || currentSpeechId;
+      if (customAudioUrls[targetId]) {
+        URL.revokeObjectURL(customAudioUrls[targetId]);
+        delete customAudioUrls[targetId];
+      }
+      delete customAudioNames[targetId];
+      await deletePersistedAudioBlob(targetId);
+      if (targetId === currentSpeechId) {
+        await loadAudioForSpeech(targetId);
+      }
+      updateAudioStatusUI();
+      refreshModalDurationControls();
+    }
+
+    function buildFullSettingsPayload() {
+      const readJson = (key, fallback) => {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (_) {
+          return fallback;
+        }
+      };
+      return {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        activeSpeechId: currentSpeechId,
+        lang: uiLang,
+        speed: playbackRate,
+        prompterMode: teleprompterMode,
+        stage: currentStage,
+        scripts: { ...(EMBEDDED_CONFIG.scripts || {}), ...readJson(STORAGE_KEY_SCRIPTS_MAP, {}) },
+        timings: { ...(EMBEDDED_CONFIG.timings || {}), ...readJson(STORAGE_KEY_TIMINGS_MAP, {}) },
+        titles: { ...(EMBEDDED_CONFIG.titles || {}), ...readJson(STORAGE_KEY_TITLES_MAP, {}) },
+        progress: { ...(EMBEDDED_CONFIG.progress || {}), ...readJson(STORAGE_KEY_PROGRESS_MAP, {}) }
+      };
+    }
+
+    function downloadConfiguredHtml() {
+      // Save any pending modal edit first if non-empty
+      if (!document.getElementById("setupModal")?.classList.contains("hidden") && modalEditorDirty) {
+        const rawEn = (document.getElementById("bulkScriptEn")?.value || "").trim();
+        if (scriptEditorMode === "lines" || rawEn) {
+          commitModalSpeech(modalEditingSpeechId);
+        }
+      }
+
+      const snapshot = pristineHtmlSnapshot || capturePristineHtmlSnapshot();
+      const payloadJson = JSON.stringify(buildFullSettingsPayload()).replace(/<\//g, "<\\/");
+      const updatedHtml = snapshot.replace(
+        /<script id="embeddedConfigJson" type="application\/json">[\s\S]*?<\/script>/i,
+        () => `<script id="embeddedConfigJson" type="application/json">${payloadJson}<\/script>`
+      );
+
+      const blob = new Blob([updatedHtml], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "index.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showModalToast(t("configuredHtmlToast"));
+    }
+
+    function exportAllSettingsJson() {
+      const payload = buildFullSettingsPayload();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "starspeech-backup.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function importAllSettingsJson(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(String(reader.result || "{}"));
+          if (!data || typeof data !== "object" || (!data.scripts && !data.timings && !data.titles)) {
+            showModalToast(t("backupInvalidWarn"), true);
+            return;
+          }
+          if (data.scripts) localStorage.setItem(STORAGE_KEY_SCRIPTS_MAP, JSON.stringify(data.scripts));
+          if (data.timings) localStorage.setItem(STORAGE_KEY_TIMINGS_MAP, JSON.stringify(data.timings));
+          if (data.titles) localStorage.setItem(STORAGE_KEY_TITLES_MAP, JSON.stringify(data.titles));
+          if (data.progress) localStorage.setItem(STORAGE_KEY_PROGRESS_MAP, JSON.stringify(data.progress));
+          if (data.lang === "en" || data.lang === "ko") {
+            uiLang = data.lang;
+            localStorage.setItem(STORAGE_KEY_LANG, data.lang);
+          }
+          if (data.speed === 0.8 || data.speed === 1.0) {
+            setPlaybackRate(data.speed);
+          }
+          if (data.prompterMode === "auto" || data.prompterMode === "manual") {
+            setTeleprompterMode(data.prompterMode);
+          }
+          const nextSpeech = (Number(data.activeSpeechId) >= 1 && Number(data.activeSpeechId) <= 12)
+            ? Number(data.activeSpeechId)
+            : currentSpeechId;
+          selectSpeech(nextSpeech);
+          applyTranslations();
+          populateModalEditorForSpeech(nextSpeech);
+          showModalToast(t("backupImportedToast"));
+        } catch (_) {
+          showModalToast(t("backupInvalidWarn"), true);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    // =========================================================
+    // STAGE SWITCHING
+    // =========================================================
+    function switchStage(stage) {
+      stopAllPlayback();
+      if (recordingLineIndex !== null) stopLineRecording();
+      if (isRecordingFullPerf) stopFullPerformanceRecording();
+
+      currentStage = stage;
+      try {
+        localStorage.setItem(STORAGE_KEY_STAGE, stage);
+      } catch (_) {}
+      const stages = ["shadowing", "puzzle", "showtime"];
+      stages.forEach(s => {
+        const el = document.getElementById(`stage-${s}`);
+        const nav = document.getElementById(`nav-${s}`);
+        if (s === stage) {
+          el.classList.remove("hidden");
+          nav.classList.add("border-sky-600", "text-sky-700");
+          nav.classList.remove("border-transparent", "text-slate-600");
+        } else {
+          el.classList.add("hidden");
+          nav.classList.remove("border-sky-600", "text-sky-700");
+          nav.classList.add("border-transparent", "text-slate-600");
+        }
+      });
+
+      if (stage === "showtime") {
+        renderShowtimeTeleprompter();
+      } else if (stage === "puzzle") {
+        renderPuzzleSelector();
+      } else {
+        renderShadowingLines();
+      }
+    }
+
+    // =========================================================
+    // AUDIO SEGMENT PLAYBACK ENGINE (speech.mp3 + Timings)
+    // =========================================================
+    function stopAllPlayback() {
+      if (playbackWatcherId) {
+        cancelAnimationFrame(playbackWatcherId);
+        playbackWatcherId = null;
+      }
+      if (compareDelayTimer) {
+        clearTimeout(compareDelayTimer);
+        compareDelayTimer = null;
+      }
+      if (showtimeAutoTimer) {
+        clearTimeout(showtimeAutoTimer);
+        showtimeAutoTimer = null;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      try {
+        nativeAudio.pause();
+      } catch (_) {}
+      try {
+        userCompareAudio.pause();
+        userCompareAudio.onended = null;
+      } catch (_) {}
+
+      activeAudioMode = null;
+      activeLineIndex = null;
+      activeSegmentStart = null;
+      activeSegmentEnd = null;
+      activeSegmentDoneCb = null;
+      showtimePlayingBg = false;
+
+      updatePlayAllButtonUI();
+      updateShowtimeBgButtonUI();
+      updateAllLinePlaybackBars(0, -1);
+      refreshShadowingCardStates();
+    }
+
+    function playAudioSegment(index, mode, onComplete) {
+      stopAllPlayback();
+
+      const timing = audioTimings[index];
+      activeAudioMode = mode;
+      activeLineIndex = index;
+      activeSegmentStart = timing.start;
+      activeSegmentEnd = timing.end;
+      activeSegmentDoneCb = onComplete || null;
+
+      refreshShadowingCardStates();
+
+      // If speech.mp3 is loaded and playable, use exact timestamp clipping
+      if (audioReady && nativeAudio.src) {
+        nativeAudio.playbackRate = playbackRate;
+        nativeAudio.currentTime = timing.start;
+
+        const playPromise = nativeAudio.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            // Fallback to SpeechSynthesis if browser blocks audio element
+            speakFallbackLine(index, mode, onComplete);
+          });
+        }
+
+        const watchSegment = () => {
+          if (activeAudioMode !== mode || activeLineIndex !== index) return;
+          const now = nativeAudio.currentTime;
+          const span = Math.max(0.1, timing.end - timing.start);
+          const pct = Math.max(0, Math.min(100, ((now - timing.start) / span) * 100));
+          updateAllLinePlaybackBars(pct, index);
+
+          if (now >= timing.end || nativeAudio.ended) {
+            nativeAudio.pause();
+            const cb = activeSegmentDoneCb;
+            const prevMode = activeAudioMode;
+            activeAudioMode = null;
+            activeLineIndex = null;
+            updateAllLinePlaybackBars(0, -1);
+            refreshShadowingCardStates();
+            if (typeof cb === "function") cb(prevMode);
+            return;
+          }
+          playbackWatcherId = requestAnimationFrame(watchSegment);
+        };
+        playbackWatcherId = requestAnimationFrame(watchSegment);
+      } else {
+        // Graceful fallback when speech.mp3 is not yet placed next to index.html
+        speakFallbackLine(index, mode, onComplete);
+      }
+    }
+
+    function speakFallbackLine(index, mode, onComplete) {
+      if (!("speechSynthesis" in window)) {
+        // Visual timed fallback if even SpeechSynthesis is unavailable
+        const durationMs = Math.max(1200, (audioTimings[index].end - audioTimings[index].start) * 1000 / playbackRate);
+        const startMs = performance.now();
+        const tick = (now) => {
+          if (activeAudioMode !== mode || activeLineIndex !== index) return;
+          const pct = Math.min(100, ((now - startMs) / durationMs) * 100);
+          updateAllLinePlaybackBars(pct, index);
+          if (pct >= 100) {
+            activeAudioMode = null;
+            activeLineIndex = null;
+            updateAllLinePlaybackBars(0, -1);
+            refreshShadowingCardStates();
+            if (typeof onComplete === "function") onComplete();
+            return;
+          }
+          playbackWatcherId = requestAnimationFrame(tick);
+        };
+        playbackWatcherId = requestAnimationFrame(tick);
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(scriptLines[index].en);
+      utter.lang = "en-US";
+      utter.rate = playbackRate * 0.94;
+      utter.pitch = 1.04;
+
+      const estMs = Math.max(1400, (audioTimings[index].end - audioTimings[index].start) * 900 / playbackRate);
+      const startMs = performance.now();
+
+      const tick = (now) => {
+        if (activeAudioMode !== mode || activeLineIndex !== index) return;
+        const pct = Math.min(96, ((now - startMs) / estMs) * 100);
+        updateAllLinePlaybackBars(pct, index);
+        playbackWatcherId = requestAnimationFrame(tick);
+      };
+      playbackWatcherId = requestAnimationFrame(tick);
+
+      utter.onend = () => {
+        if (activeAudioMode !== mode || activeLineIndex !== index) return;
+        if (playbackWatcherId) cancelAnimationFrame(playbackWatcherId);
+        activeAudioMode = null;
+        activeLineIndex = null;
+        updateAllLinePlaybackBars(0, -1);
+        refreshShadowingCardStates();
+        if (typeof onComplete === "function") onComplete();
+      };
+      utter.onerror = () => {
+        stopAllPlayback();
+      };
+
+      window.speechSynthesis.speak(utter);
+    }
+
+    function toggleListenLine(index) {
+      if (recordingLineIndex !== null) stopLineRecording();
+      if (activeAudioMode === "line" && activeLineIndex === index) {
+        stopAllPlayback();
+        return;
+      }
+      playAudioSegment(index, "line");
+    }
+
+    function togglePlayAllShadowing() {
+      if (activeAudioMode === "all-shadow") {
+        stopAllPlayback();
+        return;
+      }
+      if (recordingLineIndex !== null) stopLineRecording();
+      playShadowingSequence(0);
+    }
+
+    function playShadowingSequence(index) {
+      if (index >= scriptLines.length) {
+        stopAllPlayback();
+        return;
+      }
+      const card = document.getElementById(`shadow-card-${index}`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      playAudioSegment(index, "all-shadow", () => {
+        compareDelayTimer = setTimeout(() => {
+          playShadowingSequence(index + 1);
+        }, 350);
+      });
+    }
+
+    function updatePlayAllButtonUI() {
+      const btn = document.getElementById("playAllShadowBtn");
+      if (!btn) return;
+      if (activeAudioMode === "all-shadow") {
+        btn.textContent = t("stopFullSpeech");
+        btn.className = "btn-tactile min-h-[38px] px-3.5 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold whitespace-nowrap shrink-0";
+      } else {
+        btn.textContent = t("playFullSpeech");
+        btn.className = "btn-tactile min-h-[38px] px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-semibold whitespace-nowrap shrink-0";
+      }
+    }
+
+    function setPlaybackRate(rate) {
+      playbackRate = rate;
+      try {
+        localStorage.setItem(STORAGE_KEY_SPEED, String(rate));
+      } catch (_) {}
+      if (audioReady) nativeAudio.playbackRate = rate;
+      const slowBtn = document.getElementById("speedSlowBtn");
+      const normBtn = document.getElementById("speedNormalBtn");
+      if (rate < 1) {
+        slowBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors";
+        normBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors";
+      } else {
+        normBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0 transition-colors";
+        slowBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0 transition-colors";
+      }
+    }
+
+    // =========================================================
+    // RECORDING & SPEECH RECOGNITION MATCHING
+    // =========================================================
+    async function toggleRecordLine(index) {
+      if (recordingLineIndex === index) {
+        stopLineRecording();
+        return;
+      }
+
+      stopAllPlayback();
+      if (recordingLineIndex !== null) {
+        stopLineRecording();
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showLineInlineStatus(index, t("micUnavailable"), "error");
+        return;
+      }
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        showLineInlineStatus(index, t("micDenied"), "error");
+        return;
+      }
+
+      recordingLineIndex = index;
+      latestTranscript = "";
+      recordedChunks = [];
+      recordingStartTime = performance.now();
+
+      // Start MediaRecorder so child can always Compare their real voice
+      try {
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+        mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+          finalizeLineRecording(index);
+        };
+        mediaRecorder.start();
+      } catch (_) {
+        stopMediaStreamOnly();
+        recordingLineIndex = null;
+        showLineInlineStatus(index, t("micStartErr"), "error");
+        return;
+      }
+
+      // Start Web Speech API Recognition if available
+      if (SpeechRecognitionAPI) {
+        try {
+          speechRecognition = new SpeechRecognitionAPI();
+          speechRecognition.lang = "en-US";
+          speechRecognition.interimResults = true;
+          speechRecognition.continuous = true;
+
+          speechRecognition.onresult = (event) => {
+            let combined = "";
+            for (let i = 0; i < event.results.length; i++) {
+              combined += event.results[i][0].transcript + " ";
+            }
+            latestTranscript = combined.trim();
+            const liveEl = document.getElementById(`live-transcript-${index}`);
+            if (liveEl && latestTranscript) {
+              liveEl.textContent = `"${latestTranscript}"`;
+            }
+          };
+
+          speechRecognition.onerror = () => {
+            // Keep MediaRecorder running even if speech API hiccups
+          };
+
+          speechRecognition.start();
+        } catch (_) {
+          speechRecognition = null;
+        }
+      }
+
+      refreshShadowingCardStates();
+    }
+
+    function stopLineRecording() {
+      const idx = recordingLineIndex;
+      if (idx === null) return;
+
+      if (speechRecognition) {
+        try { speechRecognition.stop(); } catch (_) {}
+        speechRecognition = null;
+      }
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        try { mediaRecorder.stop(); } catch (_) {}
+      } else {
+        finalizeLineRecording(idx);
+      }
+    }
+
+    function stopMediaStreamOnly() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        mediaStream = null;
+      }
+    }
+
+    function finalizeLineRecording(index) {
+      stopMediaStreamOnly();
+      recordingLineIndex = null;
+
+      const durationMs = performance.now() - recordingStartTime;
+      const blob = new Blob(recordedChunks, { type: recordedChunks[0]?.type || "audio/webm" });
+      if (lineRecordings[index] && lineRecordings[index].url) {
+        URL.revokeObjectURL(lineRecordings[index].url);
+      }
+      const url = URL.createObjectURL(blob);
+
+      // Evaluate pronunciation match rate
+      let matchResult;
+      if (latestTranscript.trim().length > 0) {
+        matchResult = evaluatePronunciation(scriptLines[index].en, latestTranscript);
+      } else if (!SpeechRecognitionAPI && durationMs >= 700) {
+        // Browser lacks SpeechRecognition API, reward recorded effort
+        matchResult = {
+          percent: 80,
+          stars: 2,
+          wordResults: tokenizeDisplayWords(scriptLines[index].en).map(w => ({ word: w, matched: true })),
+          transcript: t("recFallbackMsg")
+        };
+      } else {
+        matchResult = {
+          percent: durationMs >= 700 ? 35 : 0,
+          stars: durationMs >= 700 ? 1 : 0,
+          wordResults: tokenizeDisplayWords(scriptLines[index].en).map(w => ({ word: w, matched: false })),
+          transcript: latestTranscript || t("recNoWordsMsg")
+        };
+      }
+
+      lineRecordings[index] = {
+        url,
+        blob,
+        transcript: matchResult.transcript,
+        matchPercent: matchResult.percent,
+        wordResults: matchResult.wordResults,
+        justEarnedStars: matchResult.stars
+      };
+
+      // Keep highest star score earned for this line
+      if (matchResult.stars > progressState.stars[index]) {
+        progressState.stars[index] = matchResult.stars;
+        saveProgress();
+      } else if (matchResult.stars > 0 && progressState.stars[index] === 0) {
+        progressState.stars[index] = matchResult.stars;
+        saveProgress();
+      }
+
+      if (matchResult.stars > 0) {
+        playRewardChime(matchResult.stars);
+      }
+      if (matchResult.stars === 3) {
+        launchMiniConfetti();
+      }
+
+      renderShadowingLines(index);
+      updateSummaryMetrics();
+    }
+
+    // =========================================================
+    // PRONUNCIATION MATCHING ALGORITHM
+    // =========================================================
+    function normalizeWord(w) {
+      return w.toLowerCase().replace(/[^a-z0-9']/g, "").replace(/^'+|'+$/g, "");
+    }
+
+    function tokenizeDisplayWords(sentence) {
+      return sentence.trim().split(/\s+/).filter(Boolean);
+    }
+
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      if (m === 0) return n;
+      if (n === 0) return m;
+      const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+        }
+      }
+      return dp[m][n];
+    }
+
+    function wordsMatchFuzzy(target, spoken) {
+      if (!target || !spoken) return false;
+      if (target === spoken) return true;
+      // Common contraction equivalences
+      const pairs = { "let's": "lets", "i'm": "im", "it's": "its", "don't": "dont", "15": "fifteen" };
+      if ((pairs[target] && pairs[target] === spoken) || (pairs[spoken] && pairs[spoken] === target)) return true;
+      if (target.length >= 4 && spoken.length >= 4) {
+        const dist = levenshtein(target, spoken);
+        const sim = 1 - dist / Math.max(target.length, spoken.length);
+        return sim >= 0.72;
+      }
+      return false;
+    }
+
+    function evaluatePronunciation(targetSentence, transcript) {
+      const displayWords = tokenizeDisplayWords(targetSentence);
+      const targetNorm = displayWords.map(normalizeWord);
+      const spokenNorm = transcript.trim().split(/\s+/).map(normalizeWord).filter(Boolean);
+
+      // Greedy forward window alignment so repeated common words match in order
+      let spokenCursor = 0;
+      let matchedCount = 0;
+      const wordResults = [];
+
+      for (let i = 0; i < targetNorm.length; i++) {
+        const tw = targetNorm[i];
+        let foundIdx = -1;
+        // Look ahead in spoken tokens first, then anywhere if needed
+        for (let j = spokenCursor; j < spokenNorm.length; j++) {
+          if (wordsMatchFuzzy(tw, spokenNorm[j])) {
+            foundIdx = j;
+            break;
+          }
+        }
+        if (foundIdx === -1) {
+          for (let j = 0; j < spokenNorm.length; j++) {
+            if (wordsMatchFuzzy(tw, spokenNorm[j])) {
+              foundIdx = j;
+              break;
+            }
+          }
+        }
+        if (foundIdx !== -1) {
+          matchedCount++;
+          if (foundIdx >= spokenCursor) spokenCursor = foundIdx + 1;
+          wordResults.push({ word: displayWords[i], matched: true });
+        } else {
+          wordResults.push({ word: displayWords[i], matched: false });
+        }
+      }
+
+      const percent = targetNorm.length > 0 ? Math.round((matchedCount / targetNorm.length) * 100) : 0;
+      let stars = 1;
+      if (percent >= 80) stars = 3;
+      else if (percent >= 50) stars = 2;
+      else if (percent === 0 && spokenNorm.length === 0) stars = 0;
+
+      return { percent, stars, wordResults, transcript };
+    }
+
+    // =========================================================
+    // COMPARE NATIVE VS CHILD VOICE
+    // =========================================================
+    function toggleCompareLine(index) {
+      const rec = lineRecordings[index];
+      if (!rec || !rec.url) {
+        showLineInlineStatus(index, t("compareNeedRec"), "info");
+        return;
+      }
+
+      if ((activeAudioMode === "compare-native" || activeAudioMode === "compare-mine") && activeLineIndex === index) {
+        stopAllPlayback();
+        return;
+      }
+
+      // Step 1: Play Native Speaker clip
+      playAudioSegment(index, "compare-native", () => {
+        // Step 2: Brief pause, then play child's recorded voice
+        compareDelayTimer = setTimeout(() => {
+          playRecordedMineOnly(index, "compare-mine");
+        }, 380);
+      });
+    }
+
+    function playRecordedMineOnly(index, modeName = "compare-mine") {
+      const rec = lineRecordings[index];
+      if (!rec || !rec.url) return;
+
+      if (activeAudioMode === modeName && activeLineIndex === index) {
+        stopAllPlayback();
+        return;
+      }
+
+      stopAllPlayback();
+      activeAudioMode = modeName;
+      activeLineIndex = index;
+      refreshShadowingCardStates();
+
+      userCompareAudio.src = rec.url;
+      userCompareAudio.onended = () => {
+        activeAudioMode = null;
+        activeLineIndex = null;
+        refreshShadowingCardStates();
+      };
+      userCompareAudio.play().catch(() => {
+        stopAllPlayback();
+      });
+    }
+
+    function showLineInlineStatus(index, msg, tone) {
+      const el = document.getElementById(`line-notice-${index}`);
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove("hidden", "text-rose-700", "bg-rose-50", "text-sky-800", "bg-sky-50");
+      if (tone === "error") {
+        el.classList.add("text-rose-700", "bg-rose-50");
+      } else {
+        el.classList.add("text-sky-800", "bg-sky-50");
+      }
+      setTimeout(() => {
+        if (el) el.classList.add("hidden");
+      }, 4000);
+    }
+
+    // =========================================================
+    // RENDERING: SHADOWING PRACTICE (12 LINES)
+    // =========================================================
+    function renderShadowingLines(animateStarIndex = -1) {
+      const container = document.getElementById("shadowingLinesContainer");
+      if (!container) return;
+
+      container.innerHTML = scriptLines.map((line, i) => {
+        const stars = progressState.stars[i] || 0;
+        const isDone = stars > 0;
+        const timing = audioTimings[i];
+        const rec = lineRecordings[i];
+        const hasRec = Boolean(rec && rec.url);
+
+        const cardBg = isDone
+          ? "bg-emerald-50/85 border-emerald-300"
+          : "bg-white border-slate-200";
+
+        const starIcons = [1, 2, 3].map(n => {
+          const filled = n <= stars;
+          const animClass = (i === animateStarIndex && filled) ? "animate-star-pop" : "";
+          return filled
+            ? `<svg class="w-6 h-6 text-amber-400 fill-amber-400 ${animClass}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z"/></svg>`
+            : `<svg class="w-6 h-6 text-slate-300 fill-slate-200" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z"/></svg>`;
+        }).join("");
+
+        let feedbackHtml = "";
+        if (rec) {
+          const wordSpans = rec.wordResults.map(wr =>
+            wr.matched
+              ? `<span class="text-emerald-800 font-semibold">${escapeHtml(wr.word)}</span>`
+              : `<span class="text-amber-700 underline decoration-amber-400 decoration-2 underline-offset-4">${escapeHtml(wr.word)}</span>`
+          ).join(" ");
+
+          const encouragement = rec.justEarnedStars === 3
+            ? t("encourage3")
+            : rec.justEarnedStars === 2
+              ? t("encourage2")
+              : t("encourage1");
+
+          feedbackHtml = `
+            <div class="mt-4 pt-3.5 border-t ${isDone ? "border-emerald-200" : "border-slate-100"} space-y-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 font-semibold ${rec.matchPercent >= 80 ? "text-emerald-800" : "text-slate-700"}">
+                  <span class="tabular-nums">${t("matchLabel", rec.matchPercent)}</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span>${encouragement}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="toggleListenLine(${i})" class="text-xs font-semibold text-sky-700 hover:underline whitespace-nowrap">${t("replayNative")}</button>
+                  <span aria-hidden="true" class="text-slate-300">/</span>
+                  <button onclick="playRecordedMineOnly(${i})" class="text-xs font-semibold text-amber-700 hover:underline whitespace-nowrap">${t("replayMine")}</button>
+                </div>
+              </div>
+              <div class="text-sm leading-relaxed">${wordSpans}</div>
+              <p class="text-xs text-slate-500">${t("heardPrefix")} <span class="italic">${escapeHtml(rec.transcript)}</span></p>
+            </div>
+          `;
+        }
+
+        return `
+          <article id="shadow-card-${i}" class="rounded-2xl border ${cardBg} p-5 sm:p-6 shadow-sm transition-colors duration-200">
+            <!-- Top Metadata + Stars Row -->
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-2 text-xs font-semibold text-slate-500 tabular-nums">
+                <span class="text-slate-800">${t("lineLabel", i + 1)}</span>
+                <span aria-hidden="true">&middot;</span>
+                <span class="font-mono">${formatSec(timing.start)}&ndash;${formatSec(timing.end)}</span>
+                ${isDone ? `<span aria-hidden="true">&middot;</span><span class="text-emerald-700 font-bold">${t("practicedBadge")}</span>` : ""}
+              </div>
+              <div class="flex items-center gap-1" aria-label="${stars} out of 3 stars earned">
+                ${starIcons}
+              </div>
+            </div>
+
+            <!-- Main English Sentence -->
+            <div class="mt-3 space-y-1.5">
+              <p class="font-display text-xl sm:text-[22px] font-bold text-slate-900 leading-snug">
+                ${escapeHtml(line.en)}
+              </p>
+            </div>
+
+            <!-- Playback Progress Bar (thin, clean) -->
+            <div class="mt-4 h-1.5 w-full bg-slate-200/70 rounded-full overflow-hidden">
+              <div id="line-progress-${i}" class="h-full bg-sky-500 rounded-full transition-none" style="width: 0%"></div>
+            </div>
+
+            <!-- Live Transcript Indicator while Recording -->
+            <div id="live-rec-box-${i}" class="hidden mt-3 rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0"></span>
+                <span id="live-transcript-${i}" class="text-sm font-medium text-rose-900 truncate">${t("listeningPrompt")}</span>
+              </div>
+              <div class="flex items-end gap-0.5 h-4 shrink-0" aria-hidden="true">
+                <span class="w-1 h-full bg-rose-500 rounded-full eq-bar"></span>
+                <span class="w-1 h-full bg-rose-500 rounded-full eq-bar"></span>
+                <span class="w-1 h-full bg-rose-500 rounded-full eq-bar"></span>
+              </div>
+            </div>
+
+            <!-- Inline Notice Area -->
+            <div id="line-notice-${i}" class="hidden mt-3 rounded-xl px-4 py-2 text-xs font-semibold"></div>
+
+            <!-- Big Touchable Kid-Friendly Controls -->
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+              <button id="btn-listen-${i}" onclick="toggleListenLine(${i})"
+                class="btn-tactile flex-1 sm:flex-none min-w-[140px] min-h-[48px] px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <span>${t("btnListen")}</span>
+              </button>
+
+              <button id="btn-record-${i}" onclick="toggleRecordLine(${i})"
+                class="btn-tactile flex-1 sm:flex-none min-w-[145px] min-h-[48px] px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                <span>${t("btnRecord")}</span>
+              </button>
+
+              <button id="btn-compare-${i}" onclick="toggleCompareLine(${i})"
+                class="btn-tactile flex-1 sm:flex-none min-w-[175px] min-h-[48px] px-5 py-2.5 rounded-xl ${hasRec ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"} text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+                <span>${t("btnCompare")}</span>
+              </button>
+            </div>
+
+            ${feedbackHtml}
+          </article>
+        `;
+      }).join("");
+
+      refreshShadowingCardStates();
+    }
+
+    function refreshShadowingCardStates() {
+      updatePlayAllButtonUI();
+      for (let i = 0; i < 12; i++) {
+        const listenBtn = document.getElementById(`btn-listen-${i}`);
+        const recordBtn = document.getElementById(`btn-record-${i}`);
+        const compareBtn = document.getElementById(`btn-compare-${i}`);
+        const liveBox = document.getElementById(`live-rec-box-${i}`);
+        const card = document.getElementById(`shadow-card-${i}`);
+        if (!listenBtn || !recordBtn || !compareBtn) continue;
+
+        const isPlayingThis = (activeAudioMode === "line" || activeAudioMode === "all-shadow") && activeLineIndex === i;
+        const isRecordingThis = recordingLineIndex === i;
+        const isComparingNative = activeAudioMode === "compare-native" && activeLineIndex === i;
+        const isComparingMine = activeAudioMode === "compare-mine" && activeLineIndex === i;
+        const hasRec = Boolean(lineRecordings[i] && lineRecordings[i].url);
+
+        // Card highlight ring while active
+        if (isPlayingThis || isRecordingThis || isComparingNative || isComparingMine) {
+          card.classList.add("ring-2", "ring-sky-400");
+        } else {
+          card.classList.remove("ring-2", "ring-sky-400");
+        }
+
+        // Listen Button
+        listenBtn.querySelector("span").textContent = isPlayingThis ? t("btnPause") : t("btnListen");
+
+        // Record Button + Live Box
+        if (isRecordingThis) {
+          recordBtn.className = "btn-tactile flex-1 sm:flex-none min-w-[145px] min-h-[48px] px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0";
+          recordBtn.querySelector("span").textContent = t("btnStopRec");
+          if (liveBox) liveBox.classList.remove("hidden");
+        } else {
+          recordBtn.className = "btn-tactile flex-1 sm:flex-none min-w-[145px] min-h-[48px] px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0";
+          recordBtn.querySelector("span").textContent = t("btnRecord");
+          if (liveBox) liveBox.classList.add("hidden");
+        }
+
+        // Compare Button
+        if (isComparingNative) {
+          compareBtn.className = "btn-tactile flex-1 sm:flex-none min-w-[175px] min-h-[48px] px-5 py-2.5 rounded-xl bg-sky-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0";
+          compareBtn.querySelector("span").textContent = t("compareNative");
+        } else if (isComparingMine) {
+          compareBtn.className = "btn-tactile flex-1 sm:flex-none min-w-[175px] min-h-[48px] px-5 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0";
+          compareBtn.querySelector("span").textContent = t("compareMine");
+        } else {
+          compareBtn.className = `btn-tactile flex-1 sm:flex-none min-w-[175px] min-h-[48px] px-5 py-2.5 rounded-xl ${hasRec ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"} text-sm font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0`;
+          compareBtn.querySelector("span").textContent = t("btnCompare");
+        }
+      }
+    }
+
+    function updateAllLinePlaybackBars(pct, targetIdx) {
+      for (let i = 0; i < 12; i++) {
+        const bar = document.getElementById(`line-progress-${i}`);
+        if (bar) {
+          bar.style.width = i === targetIdx ? `${pct}%` : "0%";
+        }
+      }
+    }
+
+    function updateSummaryMetrics() {
+      const totalStars = progressState.stars.reduce((acc, s) => acc + s, 0);
+      const completed = progressState.stars.filter(s => s > 0).length;
+      const pct = Math.round((totalStars / 36) * 100);
+
+      document.getElementById("totalStarsCount").textContent = totalStars;
+      const summaryEl = document.getElementById("completedLinesSummary");
+      if (summaryEl) summaryEl.textContent = t("completedLinesFmt", completed);
+      document.getElementById("overallProgressBar").style.width = `${pct}%`;
+      document.getElementById("overallProgressPct").textContent = `${pct}%`;
+    }
+
+    // =========================================================
+    // STAGE 2: WORD PUZZLE (SENTENCE ASSEMBLY)
+    // =========================================================
+    function initPuzzleForLine(index) {
+      puzzleIndex = index;
+      const words = tokenizeDisplayWords(scriptLines[index].en);
+      const tokens = words.map((text, idx) => ({ id: `${index}-${idx}`, text }));
+
+      // Shuffle reliably so it isn't identical to solved order when >1 word
+      const shuffled = [...tokens];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      if (shuffled.length > 1 && shuffled.every((t, idx) => t.id === tokens[idx].id)) {
+        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+      }
+
+      puzzleBankTokens = shuffled;
+      puzzleTrayTokens = [];
+      hidePuzzleFeedback();
+      renderPuzzleWorkspace();
+    }
+
+    function renderPuzzleSelector() {
+      const strip = document.getElementById("puzzleLineSelector");
+      const solvedCount = progressState.solvedPuzzles.filter(Boolean).length;
+      document.getElementById("puzzleSolvedCount").textContent = solvedCount;
+
+      strip.innerHTML = scriptLines.map((_, i) => {
+        const isCurrent = i === puzzleIndex;
+        const isSolved = progressState.solvedPuzzles[i];
+        let cls = "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100";
+        if (isCurrent) {
+          cls = "border-sky-600 bg-sky-600 text-white";
+        } else if (isSolved) {
+          cls = "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+        }
+        return `
+          <button onclick="initPuzzleForLine(${i})"
+            class="btn-tactile min-h-[42px] rounded-xl border ${cls} text-xs font-bold tabular-nums flex items-center justify-center gap-1">
+            <span>${i + 1}</span>
+            ${isSolved ? `<span aria-label="Solved">&#10003;</span>` : ""}
+          </button>
+        `;
+      }).join("");
+    }
+
+    function renderPuzzleWorkspace() {
+      renderPuzzleSelector();
+      const timing = audioTimings[puzzleIndex];
+      document.getElementById("puzzleCurrentLabel").textContent = t("lineLabel", puzzleIndex + 1);
+      document.getElementById("puzzleTimingLabel").textContent = `${formatSec(timing.start)} – ${formatSec(timing.end)}`;
+
+      const totalWords = puzzleBankTokens.length + puzzleTrayTokens.length;
+      document.getElementById("puzzleTrayCounter").textContent = t("puzzleWordsFmt", puzzleTrayTokens.length, totalWords);
+
+      const trayEl = document.getElementById("puzzleAnswerTray");
+      if (puzzleTrayTokens.length === 0) {
+        trayEl.innerHTML = `<span class="text-sm text-slate-400">${t("puzzleTrayEmpty")}</span>`;
+      } else {
+        trayEl.innerHTML = puzzleTrayTokens.map(tok => `
+          <button type="button"
+            draggable="true"
+            ondragstart="handleTileDragStart(event, '${tok.id}', 'tray')"
+            ondragend="handleTileDragEnd(event)"
+            onclick="moveTokenToBank('${tok.id}')"
+            class="word-tile min-h-[44px] px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-display text-base font-bold shadow-sm cursor-pointer">
+            ${escapeHtml(tok.text)}
+          </button>
+        `).join("");
+      }
+
+      const bankEl = document.getElementById("puzzleWordBank");
+      if (puzzleBankTokens.length === 0) {
+        bankEl.innerHTML = `<span class="text-sm text-slate-400">${t("puzzleBankEmpty")}</span>`;
+      } else {
+        bankEl.innerHTML = puzzleBankTokens.map(tok => `
+          <button type="button"
+            draggable="true"
+            ondragstart="handleTileDragStart(event, '${tok.id}', 'bank')"
+            ondragend="handleTileDragEnd(event)"
+            onclick="moveTokenToTray('${tok.id}')"
+            class="word-tile min-h-[44px] px-4 py-2 rounded-xl border-2 border-slate-200 bg-slate-50 hover:border-sky-400 hover:bg-sky-50 text-slate-900 font-display text-base font-bold cursor-pointer">
+            ${escapeHtml(tok.text)}
+          </button>
+        `).join("");
+      }
+    }
+
+    function moveTokenToTray(id) {
+      const idx = puzzleBankTokens.findIndex(t => t.id === id);
+      if (idx === -1) return;
+      const [tok] = puzzleBankTokens.splice(idx, 1);
+      puzzleTrayTokens.push(tok);
+      hidePuzzleFeedback();
+      renderPuzzleWorkspace();
+    }
+
+    function moveTokenToBank(id) {
+      const idx = puzzleTrayTokens.findIndex(t => t.id === id);
+      if (idx === -1) return;
+      const [tok] = puzzleTrayTokens.splice(idx, 1);
+      puzzleBankTokens.push(tok);
+      hidePuzzleFeedback();
+      renderPuzzleWorkspace();
+    }
+
+    function handleTileDragStart(event, id, from) {
+      draggedToken = { id, from };
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", id);
+      event.target.classList.add("dragging");
+    }
+
+    function handleTileDragEnd(event) {
+      event.target.classList.remove("dragging");
+      draggedToken = null;
+    }
+
+    function handleTrayDragOver(event) {
+      event.preventDefault();
+      event.currentTarget.classList.add("border-sky-500", "bg-sky-50/70");
+    }
+
+    function handleTrayDragLeave(event) {
+      event.currentTarget.classList.remove("border-sky-500", "bg-sky-50/70");
+    }
+
+    function handleTrayDrop(event) {
+      event.preventDefault();
+      event.currentTarget.classList.remove("border-sky-500", "bg-sky-50/70");
+      if (!draggedToken) return;
+      if (draggedToken.from === "bank") {
+        moveTokenToTray(draggedToken.id);
+      }
+    }
+
+    function handleBankDragOver(event) {
+      event.preventDefault();
+    }
+
+    function handleBankDrop(event) {
+      event.preventDefault();
+      if (!draggedToken) return;
+      if (draggedToken.from === "tray") {
+        moveTokenToBank(draggedToken.id);
+      }
+    }
+
+    function playPuzzleHintAudio() {
+      playAudioSegment(puzzleIndex, "line");
+    }
+
+    function resetCurrentPuzzle() {
+      initPuzzleForLine(puzzleIndex);
+    }
+
+    function checkPuzzleAnswer() {
+      const fb = document.getElementById("puzzleFeedback");
+      const targetWords = tokenizeDisplayWords(scriptLines[puzzleIndex].en);
+      const userWords = puzzleTrayTokens.map(t => t.text);
+
+      if (userWords.length < targetWords.length) {
+        fb.textContent = t("puzzleIncomplete");
+        fb.className = "rounded-xl px-4 py-3 text-sm font-semibold bg-amber-50 border border-amber-200 text-amber-900";
+        return;
+      }
+
+      const isCorrect = targetWords.every((w, idx) => w === userWords[idx]);
+      if (isCorrect) {
+        progressState.solvedPuzzles[puzzleIndex] = true;
+        saveProgress();
+        renderPuzzleSelector();
+        playRewardChime(3);
+        fb.textContent = t("puzzleCorrect");
+        fb.className = "rounded-xl px-4 py-3 text-sm font-semibold bg-emerald-50 border border-emerald-200 text-emerald-900";
+      } else {
+        // Find first mismatch index to give a gentle kid-friendly hint
+        const firstBad = targetWords.findIndex((w, idx) => w !== userWords[idx]);
+        fb.textContent = t("puzzleAlmost", firstBad + 1);
+        fb.className = "rounded-xl px-4 py-3 text-sm font-semibold bg-rose-50 border border-rose-200 text-rose-900";
+      }
+    }
+
+    function hidePuzzleFeedback() {
+      const fb = document.getElementById("puzzleFeedback");
+      if (fb) fb.className = "hidden";
+    }
+
+    function nextPuzzleLine() {
+      initPuzzleForLine((puzzleIndex + 1) % 12);
+    }
+
+    function goToShadowingFromPuzzle() {
+      const target = puzzleIndex;
+      switchStage("shadowing");
+      setTimeout(() => {
+        const card = document.getElementById(`shadow-card-${target}`);
+        if (card) {
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.classList.add("ring-2", "ring-emerald-400");
+          setTimeout(() => card.classList.remove("ring-2", "ring-emerald-400"), 1400);
+        }
+      }, 100);
+    }
+
+    // =========================================================
+    // STAGE 3: SHOWTIME STAGE (TELEPROMPTER & FULL PERFORMANCE)
+    // =========================================================
+    function setTeleprompterMode(mode) {
+      teleprompterMode = mode;
+      try {
+        localStorage.setItem(STORAGE_KEY_PROMPTER_MODE, mode);
+      } catch (_) {}
+      const autoBtn = document.getElementById("scrollAutoBtn");
+      const manBtn = document.getElementById("scrollManualBtn");
+      if (mode === "auto") {
+        autoBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0";
+        manBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0";
+      } else {
+        manBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm whitespace-nowrap shrink-0";
+        autoBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 whitespace-nowrap shrink-0";
+      }
+    }
+
+    function renderShowtimeTeleprompter() {
+      const viewport = document.getElementById("teleprompterViewport");
+      document.getElementById("showtimeLineCounter").textContent = t("showtimeCounterFmt", showtimeIndex + 1);
+
+      viewport.innerHTML = scriptLines.map((line, i) => {
+        const isActive = i === showtimeIndex;
+        const isPast = i < showtimeIndex;
+        const styleClass = isActive
+          ? "text-white font-bold text-2xl sm:text-3xl opacity-100 scale-100 bg-white/10 border border-amber-400/40 rounded-2xl p-4 sm:p-5"
+          : isPast
+            ? "text-slate-500 text-lg sm:text-xl opacity-55 px-4 py-2"
+            : "text-slate-300 text-lg sm:text-xl opacity-75 px-4 py-2";
+        return `
+          <div id="tp-line-${i}" onclick="jumpShowtimeLine(${i})" class="teleprompter-line cursor-pointer ${styleClass}">
+            <span class="font-mono text-xs ${isActive ? "text-amber-300" : "text-slate-500"} mr-2 tabular-nums">${String(i + 1).padStart(2, "0")}</span>
+            <span class="font-display leading-snug">${escapeHtml(line.en)}</span>
+          </div>
+        `;
+      }).join("");
+
+      const activeEl = document.getElementById(`tp-line-${showtimeIndex}`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+
+    function jumpShowtimeLine(index) {
+      showtimeIndex = Math.max(0, Math.min(11, index));
+      renderShowtimeTeleprompter();
+    }
+
+    function stepShowtimeLine(delta) {
+      if (showtimeAutoTimer) {
+        clearTimeout(showtimeAutoTimer);
+        showtimeAutoTimer = null;
+      }
+      showtimeIndex = Math.max(0, Math.min(11, showtimeIndex + delta));
+      renderShowtimeTeleprompter();
+      if (teleprompterMode === "auto" && (isRecordingFullPerf || showtimePlayingBg)) {
+        scheduleNextAutoTeleprompterStep();
+      }
+    }
+
+    function scheduleNextAutoTeleprompterStep() {
+      if (showtimeAutoTimer) clearTimeout(showtimeAutoTimer);
+      if (teleprompterMode !== "auto" || showtimeIndex >= 11) return;
+      const timing = audioTimings[showtimeIndex];
+      const durMs = Math.max(2000, (timing.end - timing.start) * 1000 / playbackRate);
+      showtimeAutoTimer = setTimeout(() => {
+        if (showtimeIndex < 11 && (isRecordingFullPerf || showtimePlayingBg)) {
+          showtimeIndex++;
+          renderShowtimeTeleprompter();
+          scheduleNextAutoTeleprompterStep();
+        }
+      }, durMs);
+    }
+
+    function toggleShowtimeGuideAudio() {
+      if (showtimePlayingBg) {
+        stopAllPlayback();
+        return;
+      }
+      stopAllPlayback();
+      showtimePlayingBg = true;
+      showtimeIndex = 0;
+      renderShowtimeTeleprompter();
+      updateShowtimeBgButtonUI();
+
+      if (audioReady && nativeAudio.src) {
+        nativeAudio.playbackRate = playbackRate;
+        nativeAudio.currentTime = 0;
+        nativeAudio.play().catch(() => {});
+
+        const syncToAudio = () => {
+          if (!showtimePlayingBg) return;
+          const t = nativeAudio.currentTime;
+          const idx = audioTimings.findIndex(seg => t >= seg.start && t < seg.end);
+          if (idx !== -1 && idx !== showtimeIndex) {
+            showtimeIndex = idx;
+            renderShowtimeTeleprompter();
+          }
+          if (nativeAudio.ended || t >= audioTimings[11].end) {
+            showtimePlayingBg = false;
+            nativeAudio.pause();
+            updateShowtimeBgButtonUI();
+            return;
+          }
+          playbackWatcherId = requestAnimationFrame(syncToAudio);
+        };
+        playbackWatcherId = requestAnimationFrame(syncToAudio);
+      } else {
+        // Play sequence via fallback speech
+        const playSeq = (i) => {
+          if (!showtimePlayingBg || i >= 12) {
+            showtimePlayingBg = false;
+            updateShowtimeBgButtonUI();
+            return;
+          }
+          showtimeIndex = i;
+          renderShowtimeTeleprompter();
+          speakFallbackLine(i, "showtime-bg", () => {
+            if (showtimePlayingBg) playSeq(i + 1);
+          });
+          // Re-mark showtimePlayingBg because speakFallbackLine checks activeAudioMode
+          activeAudioMode = "showtime-bg";
+          activeLineIndex = i;
+        };
+        playSeq(0);
+      }
+    }
+
+    function updateShowtimeBgButtonUI() {
+      const btn = document.getElementById("showtimeBgAudioBtn");
+      if (!btn) return;
+      if (showtimePlayingBg) {
+        btn.textContent = t("btnStopNativeTrack");
+        btn.className = "btn-tactile min-h-[42px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold whitespace-nowrap shrink-0";
+      } else {
+        btn.textContent = t("btnPlayNativeTrack");
+        btn.className = "btn-tactile min-h-[42px] px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0";
+      }
+    }
+
+    async function toggleFullPerformanceRecording() {
+      if (isRecordingFullPerf) {
+        stopFullPerformanceRecording();
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById("showtimeResultCard").classList.remove("hidden");
+        return;
+      }
+
+      try {
+        fullPerfStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        return;
+      }
+
+      isRecordingFullPerf = true;
+      fullPerfChunks = [];
+      showtimeIndex = 0;
+      renderShowtimeTeleprompter();
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      fullPerfRecorder = mimeType ? new MediaRecorder(fullPerfStream, { mimeType }) : new MediaRecorder(fullPerfStream);
+      fullPerfRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) fullPerfChunks.push(e.data);
+      };
+      fullPerfRecorder.onstop = () => {
+        if (fullPerfStream) {
+          fullPerfStream.getTracks().forEach(t => t.stop());
+          fullPerfStream = null;
+        }
+        const blob = new Blob(fullPerfChunks, { type: fullPerfChunks[0]?.type || "audio/webm" });
+        if (fullPerfUrl) URL.revokeObjectURL(fullPerfUrl);
+        fullPerfUrl = URL.createObjectURL(blob);
+
+        const playbackEl = document.getElementById("fullPerfPlaybackAudio");
+        const downloadEl = document.getElementById("downloadFullPerfLink");
+        playbackEl.src = fullPerfUrl;
+        downloadEl.href = fullPerfUrl;
+        document.getElementById("showtimeResultCard").classList.remove("hidden");
+
+        playRewardChime(3);
+        launchMiniConfetti();
+      };
+      fullPerfRecorder.start();
+
+      // Update Showtime UI to ON AIR
+      document.getElementById("showtimeRecBadge").classList.remove("hidden");
+      document.getElementById("showtimeRecBadge").classList.add("flex");
+      document.getElementById("recordFullPerfLabel").textContent = t("btnFinishPerf");
+      document.getElementById("recordFullPerfBtn").className = "btn-tactile w-full md:w-auto min-h-[54px] px-8 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-display text-base sm:text-lg font-bold inline-flex items-center justify-center gap-3 shadow-md whitespace-nowrap shrink-0";
+
+      fullPerfStartMs = performance.now();
+      fullPerfTimerId = setInterval(() => {
+        const secs = Math.floor((performance.now() - fullPerfStartMs) / 1000);
+        document.getElementById("showtimeTimer").textContent = formatSec(secs);
+      }, 250);
+
+      if (teleprompterMode === "auto") {
+        scheduleNextAutoTeleprompterStep();
+      }
+    }
+
+    function stopFullPerformanceRecording() {
+      isRecordingFullPerf = false;
+      if (fullPerfTimerId) {
+        clearInterval(fullPerfTimerId);
+        fullPerfTimerId = null;
+      }
+      if (showtimeAutoTimer) {
+        clearTimeout(showtimeAutoTimer);
+        showtimeAutoTimer = null;
+      }
+      if (showtimePlayingBg) {
+        stopAllPlayback();
+      }
+
+      document.getElementById("showtimeRecBadge").classList.add("hidden");
+      document.getElementById("showtimeRecBadge").classList.remove("flex");
+      document.getElementById("recordFullPerfLabel").textContent = t("btnRecFullPerf");
+      document.getElementById("recordFullPerfBtn").className = "btn-tactile w-full md:w-auto min-h-[54px] px-8 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-display text-base sm:text-lg font-bold inline-flex items-center justify-center gap-3 shadow-md whitespace-nowrap shrink-0";
+
+      if (fullPerfRecorder && fullPerfRecorder.state !== "inactive") {
+        try { fullPerfRecorder.stop(); } catch (_) {}
+      }
+    }
+
+    // =========================================================
+    // AUDIO & SCRIPT SETUP MODAL (BULK + 1~12 SLOT + TIMING EDITOR)
+    // =========================================================
+    let modalEditingSpeechId = 1;
+    let modalDraftTimings = DEFAULT_AUDIO_TIMINGS.map(tm => ({ ...tm }));
+    let scriptEditorMode = "bulk"; // 'bulk' | 'lines'
+    let modalEditorDirty = false;
+    let modalToastTimer = null;
+
+    function splitTextIntoSentences(fullText) {
+      const cleaned = String(fullText || "").replace(/\s+/g, " ").trim();
+      if (!cleaned) return [];
+
+      // Protect common English abbreviations from premature splitting
+      const abbrToken = "__ABBR_DOT__";
+      const protectedText = cleaned.replace(/\b(Mr|Mrs|Ms|Dr|Prof|St|Jr|Sr|vs|etc|e\.g|i\.e|U\.S|a\.m|p\.m)\./gi, (_, p1) => `${p1}${abbrToken}`);
+
+      // Split on sentence-ending punctuation followed by whitespace
+      const parts = protectedText.split(/(?<=[.!?。！？]["'”’)\]]*)\s+/);
+      return parts
+        .map(s => s.replace(new RegExp(abbrToken, "g"), ".").trim())
+        .filter(Boolean);
+    }
+
+    function splitSegmentInTwo(text) {
+      const s = text.trim();
+      if (s.length < 4) return [s];
+
+      // Prefer splitting near the middle at a natural clause boundary (, ; : — -)
+      const mid = Math.floor(s.length / 2);
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      const clauseRegex = /[,;:—-]\s+/g;
+      let match;
+      while ((match = clauseRegex.exec(s)) !== null) {
+        const splitPos = match.index + match[0].length;
+        if (splitPos > 3 && splitPos < s.length - 3) {
+          const dist = Math.abs(splitPos - mid);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = splitPos;
+          }
+        }
+      }
+      if (bestIdx !== -1 && bestDist < s.length * 0.35) {
+        return [s.slice(0, bestIdx).trim(), s.slice(bestIdx).trim()].filter(Boolean);
+      }
+
+      // Otherwise split at the nearest word boundary to midpoint
+      const words = s.split(/\s+/);
+      if (words.length >= 2) {
+        const cut = Math.max(1, Math.floor(words.length / 2));
+        return [words.slice(0, cut).join(" "), words.slice(cut).join(" ")];
+      }
+      return [s];
+    }
+
+    function extractRawLines(rawText) {
+      const normalized = String(rawText || "").replace(/\r\n/g, "\n").trim();
+      if (!normalized) return [];
+      let rawLines = normalized
+        .split("\n")
+        .map(l => l.trim())
+        .filter(Boolean);
+
+      const numberedCount = rawLines.filter(l => /^(?:Line\s*\d+\s*[:.)-]?|\d{1,2}\s*[.):])\s+/i.test(l)).length;
+      if (numberedCount >= 3 || (rawLines.length === 12 && numberedCount >= 1)) {
+        rawLines = rawLines.map(l => l.replace(/^(?:Line\s*\d+\s*[:.)-]?|\d{1,2}\s*[.):])\s+/i, "").trim()).filter(Boolean);
+      }
+      return rawLines;
+    }
+
+    function splitBulkTextToTwelve(rawText, refTimings = modalDraftTimings) {
+      const rawLines = extractRawLines(rawText);
+      if (rawLines.length === 0) return Array(12).fill("");
+
+      if (rawLines.length === 12) {
+        return rawLines;
+      }
+
+      let segments = splitTextIntoSentences(rawLines.join(" "));
+      if (segments.length === 0) return Array(12).fill("");
+      if (segments.length === 12) return segments;
+
+      while (segments.length < 12) {
+        let longestIdx = 0;
+        for (let i = 1; i < segments.length; i++) {
+          if (segments[i].length > segments[longestIdx].length) longestIdx = i;
+        }
+        const splitPair = splitSegmentInTwo(segments[longestIdx]);
+        if (splitPair.length < 2) break;
+        segments.splice(longestIdx, 1, splitPair[0], splitPair[1]);
+      }
+      while (segments.length < 12) {
+        segments.push(segments[segments.length - 1] || "");
+      }
+
+      if (segments.length > 12) {
+        const timingsSource = Array.isArray(refTimings) && refTimings.length === 12 ? refTimings : audioTimings;
+        const durations = timingsSource.map(tm => Math.max(0.5, tm.end - tm.start));
+        const totalDur = durations.reduce((a, b) => a + b, 0);
+        const totalChars = segments.reduce((sum, s) => sum + s.length, 0);
+        const grouped = [];
+        let cursor = 0;
+
+        for (let slot = 0; slot < 12; slot++) {
+          const remainingSlots = 12 - slot;
+          if (slot === 11) {
+            grouped.push(segments.slice(cursor).join(" "));
+            break;
+          }
+          const targetChars = (durations[slot] / totalDur) * totalChars;
+          let current = segments[cursor];
+          cursor++;
+          while (
+            cursor < segments.length &&
+            (segments.length - cursor) >= remainingSlots &&
+            (current.length + 1 + segments[cursor].length * 0.5) < targetChars
+          ) {
+            current += " " + segments[cursor];
+            cursor++;
+          }
+          grouped.push(current);
+        }
+        return grouped;
+      }
+
+      return segments;
+    }
+
+    function renderModalSpeechGrid() {
+      const grid = document.getElementById("modalSpeechGrid");
+      const audioTag = document.getElementById("modalSpeechAudioTag");
+      if (audioTag) audioTag.textContent = getActiveAudioFilename(modalEditingSpeechId);
+      if (!grid) return;
+
+      grid.innerHTML = SPEECH_LIBRARY.map(sp => {
+        const isEditing = sp.id === modalEditingSpeechId;
+        const isCustom = hasCustomScript(sp.id);
+        const btnCls = isEditing
+          ? "bg-sky-600 text-white border-sky-600 shadow-sm"
+          : "bg-white hover:bg-sky-50 text-slate-700 border-slate-200";
+        const dotHtml = isCustom
+          ? `<span class="w-1.5 h-1.5 rounded-full ${isEditing ? "bg-emerald-300" : "bg-emerald-500"}"></span>`
+          : "";
+        return `
+          <button type="button" onclick="selectModalSpeech(${sp.id})"
+            title="${escapeAttr(getSpeechTitle(sp.id))}"
+            class="min-h-[36px] px-1.5 py-1 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-colors ${btnCls}">
+            <span>${sp.id}</span>${dotHtml}
+          </button>
+        `;
+      }).join("");
+    }
+
+    function refreshModalDurationControls() {
+      const totalInput = document.getElementById("modalTotalDurationInput");
+      if (totalInput) {
+        totalInput.value = String(roundSec(modalDraftTimings[11].end));
+      }
+      const detectedBtn = document.getElementById("btnUseDetectedDur");
+      if (detectedBtn) {
+        if (modalEditingSpeechId === currentSpeechId && audioReady && isFinite(nativeAudio.duration) && nativeAudio.duration > 1) {
+          const det = roundSec(nativeAudio.duration);
+          detectedBtn.textContent = t("btnUseDetectedDurFmt", det);
+          detectedBtn.classList.remove("hidden");
+        } else {
+          detectedBtn.classList.add("hidden");
+        }
+      }
+    }
+
+    function getModalWorkingEnLines() {
+      if (scriptEditorMode === "bulk") {
+        const raw = (document.getElementById("bulkScriptEn")?.value || "").trim();
+        if (raw) return splitBulkTextToTwelve(raw, modalDraftTimings);
+      } else {
+        return Array.from({ length: 12 }, (_, i) => (document.getElementById(`edit-en-${i}`)?.value || "").trim());
+      }
+      return loadSavedScript(modalEditingSpeechId).map(l => l.en);
+    }
+
+    function distributeTimingsByTextLength(totalSeconds, enLines) {
+      const total = Math.max(6, roundSec(totalSeconds));
+      const weights = enLines.map(txt => Math.max(8, String(txt || "").replace(/\s+/g, "").length));
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const result = [];
+      let cursor = 0;
+
+      for (let i = 0; i < 12; i++) {
+        const start = roundSec(cursor);
+        let end;
+        if (i === 11) {
+          end = total;
+        } else {
+          const slice = (weights[i] / totalWeight) * total;
+          end = roundSec(Math.min(total - (11 - i) * 0.5, Math.max(start + 0.5, start + slice)));
+        }
+        result.push({ start, end });
+        cursor = end;
+      }
+      return result;
+    }
+
+    function fitModalTimingsToTotalDuration() {
+      const totalInput = document.getElementById("modalTotalDurationInput");
+      const desired = Math.max(6, roundSec(totalInput?.value || modalDraftTimings[11].end));
+      if (totalInput) totalInput.value = String(desired);
+
+      const enLines = getModalWorkingEnLines();
+      modalDraftTimings = distributeTimingsByTextLength(desired, enLines);
+      modalEditorDirty = true;
+
+      if (scriptEditorMode === "lines") {
+        const currentLines = collectLinesFromLineEditor(modalEditingSpeechId);
+        renderLineEditorRows(currentLines);
+      }
+      showModalToast(t("timingsFittedToastFmt", desired));
+    }
+
+    function applyDetectedAudioDuration() {
+      if (modalEditingSpeechId !== currentSpeechId || !audioReady || !isFinite(nativeAudio.duration) || nativeAudio.duration <= 1) return;
+      const totalInput = document.getElementById("modalTotalDurationInput");
+      if (totalInput) totalInput.value = String(roundSec(nativeAudio.duration));
+      fitModalTimingsToTotalDuration();
+    }
+
+    function onTimingInputChange(idx, field, rawVal) {
+      const val = roundSec(rawVal);
+      const prevEnd = modalDraftTimings[idx].end;
+      if (field === "start") {
+        modalDraftTimings[idx].start = val;
+        if (modalDraftTimings[idx].end <= val) {
+          modalDraftTimings[idx].end = roundSec(val + 0.5);
+          const endEl = document.getElementById(`edit-end-${idx}`);
+          if (endEl) endEl.value = String(modalDraftTimings[idx].end);
+        }
+      } else {
+        const minEnd = roundSec(modalDraftTimings[idx].start + 0.2);
+        const nextEnd = Math.max(minEnd, val);
+        modalDraftTimings[idx].end = nextEnd;
+
+        const autoChain = document.getElementById("autoChainTimingsCheckbox")?.checked;
+        if (autoChain && idx < 11) {
+          // Connect next line's start to this line's new end if they were previously chained or overlapping
+          if (Math.abs(modalDraftTimings[idx + 1].start - prevEnd) < 0.25 || modalDraftTimings[idx + 1].start < nextEnd) {
+            modalDraftTimings[idx + 1].start = nextEnd;
+            const nextStartEl = document.getElementById(`edit-start-${idx + 1}`);
+            if (nextStartEl) nextStartEl.value = String(nextEnd);
+            if (modalDraftTimings[idx + 1].end <= nextEnd) {
+              modalDraftTimings[idx + 1].end = roundSec(nextEnd + 1);
+              const nextEndEl = document.getElementById(`edit-end-${idx + 1}`);
+              if (nextEndEl) nextEndEl.value = String(modalDraftTimings[idx + 1].end);
+            }
+            const nextDurEl = document.getElementById(`edit-dur-${idx + 1}`);
+            if (nextDurEl) {
+              nextDurEl.textContent = `${roundSec(modalDraftTimings[idx + 1].end - modalDraftTimings[idx + 1].start)}s`;
+            }
+          }
+        }
+      }
+
+      const durEl = document.getElementById(`edit-dur-${idx}`);
+      if (durEl) {
+        durEl.textContent = `${roundSec(modalDraftTimings[idx].end - modalDraftTimings[idx].start)}s`;
+      }
+      const totalInput = document.getElementById("modalTotalDurationInput");
+      if (totalInput) {
+        totalInput.value = String(roundSec(modalDraftTimings[11].end));
+      }
+      modalEditorDirty = true;
+    }
+
+    function resetModalTimingsOnly() {
+      modalDraftTimings = DEFAULT_AUDIO_TIMINGS.map(tm => ({ ...tm }));
+      modalEditorDirty = true;
+      refreshModalDurationControls();
+      if (scriptEditorMode === "lines") {
+        const currentLines = collectLinesFromLineEditor(modalEditingSpeechId);
+        renderLineEditorRows(currentLines);
+      }
+    }
+
+    function previewModalSegment(idx) {
+      const tm = modalDraftTimings[idx];
+      if (!tm) return;
+      stopAllPlayback();
+
+      if (modalEditingSpeechId === currentSpeechId && audioReady && nativeAudio.src) {
+        nativeAudio.playbackRate = playbackRate;
+        nativeAudio.currentTime = tm.start;
+        const p = nativeAudio.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+        const watchPreview = () => {
+          if (nativeAudio.paused || nativeAudio.currentTime >= tm.end || nativeAudio.ended) {
+            try { nativeAudio.pause(); } catch (_) {}
+            return;
+          }
+          playbackWatcherId = requestAnimationFrame(watchPreview);
+        };
+        playbackWatcherId = requestAnimationFrame(watchPreview);
+      } else if ("speechSynthesis" in window) {
+        const lineText = document.getElementById(`edit-en-${idx}`)?.value.trim() || loadSavedScript(modalEditingSpeechId)[idx].en;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(lineText);
+        u.lang = "en-US";
+        u.rate = playbackRate * 0.94;
+        window.speechSynthesis.speak(u);
+      }
+    }
+
+    function populateModalEditorForSpeech(id) {
+      modalEditingSpeechId = id;
+      modalEditorDirty = false;
+      modalDraftTimings = loadSavedTimings(id);
+      const lines = loadSavedScript(id);
+
+      const titleInput = document.getElementById("modalSpeechTitleInput");
+      if (titleInput) {
+        titleInput.value = getSpeechTitle(id);
+        titleInput.placeholder = t("modalTitlePlaceholder");
+      }
+
+      const bulkEn = document.getElementById("bulkScriptEn");
+      if (bulkEn) {
+        bulkEn.value = lines.map(l => l.en).join("\n");
+        bulkEn.placeholder = t("bulkEnPlaceholder");
+      }
+
+      refreshModalDurationControls();
+      renderLineEditorRows(lines);
+      renderModalSpeechGrid();
+      updateBulkStatusBadge();
+      updateAudioStatusUI();
+
+      if (!customAudioUrls[id]) {
+        loadPersistedAudioBlob(id).then(savedAudio => {
+          if (savedAudio && savedAudio.blob && !customAudioUrls[id]) {
+            customAudioUrls[id] = URL.createObjectURL(savedAudio.blob);
+            customAudioNames[id] = savedAudio.fileName || getActiveAudioFilename(id);
+            if (modalEditingSpeechId === id) {
+              updateAudioStatusUI();
+            }
+          }
+        });
+      }
+    }
+
+    function renderLineEditorRows(lines) {
+      const rowsEl = document.getElementById("scriptEditorRows");
+      if (!rowsEl) return;
+      rowsEl.innerHTML = lines.map((line, i) => {
+        const tm = modalDraftTimings[i] || DEFAULT_AUDIO_TIMINGS[i];
+        const dur = roundSec(tm.end - tm.start);
+        return `
+        <div class="rounded-xl border border-slate-200 p-3 space-y-2 bg-white">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-600 tabular-nums">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-800">${t("lineLabel", i + 1)}</span>
+              <span id="edit-dur-${i}" class="font-mono text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${dur}s</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <label class="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                <span>${t("timingStartLabel")}</span>
+                <input id="edit-start-${i}" type="number" step="0.1" min="0" value="${tm.start}"
+                  oninput="onTimingInputChange(${i}, 'start', this.value)"
+                  class="w-16 px-1.5 py-1 rounded-lg border border-slate-300 text-xs font-mono font-bold text-slate-900 bg-slate-50 focus:bg-white" />
+              </label>
+              <span class="text-slate-400">~</span>
+              <label class="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                <span>${t("timingEndLabel")}</span>
+                <input id="edit-end-${i}" type="number" step="0.1" min="0.2" value="${tm.end}"
+                  oninput="onTimingInputChange(${i}, 'end', this.value)"
+                  class="w-16 px-1.5 py-1 rounded-lg border border-slate-300 text-xs font-mono font-bold text-slate-900 bg-slate-50 focus:bg-white" />
+              </label>
+              <button type="button" onclick="previewModalSegment(${i})"
+                class="px-2 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[11px] font-bold whitespace-nowrap">
+                &#9654; ${t("btnTestClip")}
+              </button>
+            </div>
+          </div>
+          <input id="edit-en-${i}" type="text" value="${escapeAttr(line.en)}" aria-label="Line ${i + 1} English text"
+            oninput="modalEditorDirty = true"
+            class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-900" />
+        </div>
+      `;
+      }).join("");
+    }
+
+    function setScriptEditorMode(mode) {
+      if (mode !== "bulk" && mode !== "lines") return;
+      if (mode === scriptEditorMode) return;
+
+      // Sync values between Bulk and 12-Line views
+      if (mode === "lines") {
+        const en12 = splitBulkTextToTwelve(document.getElementById("bulkScriptEn")?.value || "", modalDraftTimings);
+        const existing = loadSavedScript(modalEditingSpeechId);
+        const merged = Array.from({ length: 12 }, (_, i) => ({
+          en: en12[i] || existing[i].en
+        }));
+        renderLineEditorRows(merged);
+      } else {
+        const currentLines = collectLinesFromLineEditor(modalEditingSpeechId);
+        const bulkEn = document.getElementById("bulkScriptEn");
+        if (bulkEn) bulkEn.value = currentLines.map(l => l.en).join("\n");
+        updateBulkStatusBadge();
+      }
+
+      scriptEditorMode = mode;
+      const bulkPanel = document.getElementById("bulkEditorPanel");
+      const linesPanel = document.getElementById("lineEditorPanel");
+      const tabBulk = document.getElementById("editorTabBulk");
+      const tabLines = document.getElementById("editorTabLines");
+
+      if (mode === "bulk") {
+        bulkPanel?.classList.remove("hidden");
+        linesPanel?.classList.add("hidden");
+        if (tabBulk) tabBulk.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap transition-colors";
+        if (tabLines) tabLines.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap transition-colors";
+      } else {
+        bulkPanel?.classList.add("hidden");
+        linesPanel?.classList.remove("hidden");
+        if (tabLines) tabLines.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm whitespace-nowrap transition-colors";
+        if (tabBulk) tabBulk.className = "px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap transition-colors";
+      }
+    }
+
+    function onBulkInputChange() {
+      modalEditorDirty = true;
+      updateBulkStatusBadge();
+    }
+
+    function updateBulkStatusBadge() {
+      const badge = document.getElementById("bulkStatusBadge");
+      const bulkEn = document.getElementById("bulkScriptEn");
+      if (!badge || !bulkEn) return;
+
+      const raw = bulkEn.value.trim();
+      if (!raw) {
+        badge.textContent = t("bulkStatusEmpty");
+        badge.className = "font-semibold text-amber-700";
+        return;
+      }
+
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const sentences = splitTextIntoSentences(lines.join(" "));
+      if (lines.length === 12) {
+        badge.textContent = t("bulkStatusReady12");
+        badge.className = "font-semibold text-emerald-700";
+      } else {
+        badge.textContent = t("bulkStatusWillSplitFmt", lines.length, sentences.length);
+        badge.className = "font-semibold text-sky-700";
+      }
+    }
+
+    function autoSplitBulkInputs() {
+      const bulkEn = document.getElementById("bulkScriptEn");
+      if (bulkEn && bulkEn.value.trim()) {
+        bulkEn.value = splitBulkTextToTwelve(bulkEn.value, modalDraftTimings).join("\n");
+      }
+      modalEditorDirty = true;
+      updateBulkStatusBadge();
+    }
+
+    function clearBulkInputs() {
+      const bulkEn = document.getElementById("bulkScriptEn");
+      if (bulkEn) bulkEn.value = "";
+      modalEditorDirty = true;
+      updateBulkStatusBadge();
+      bulkEn?.focus();
+    }
+
+    function collectLinesFromLineEditor(speechId) {
+      const fallback = loadSavedScript(speechId);
+      return fallback.map((line, i) => {
+        const enVal = document.getElementById(`edit-en-${i}`)?.value.trim();
+        return {
+          en: enVal || line.en
+        };
+      });
+    }
+
+    function collectTimingsFromLineEditor() {
+      return modalDraftTimings.map((tm, i) => {
+        const startEl = document.getElementById(`edit-start-${i}`);
+        const endEl = document.getElementById(`edit-end-${i}`);
+        const start = startEl ? roundSec(startEl.value) : roundSec(tm.start);
+        let end = endEl ? roundSec(endEl.value) : roundSec(tm.end);
+        if (end <= start) end = roundSec(start + 0.5);
+        return { start, end };
+      });
+    }
+
+    function showModalToast(message, isError = false) {
+      const toast = document.getElementById("modalSaveToast");
+      if (!toast) return;
+      toast.textContent = message;
+      toast.className = isError
+        ? "text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg"
+        : "text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg";
+      toast.classList.remove("hidden");
+      if (modalToastTimer) clearTimeout(modalToastTimer);
+      modalToastTimer = setTimeout(() => toast.classList.add("hidden"), 2600);
+    }
+
+    function commitModalSpeech(speechId) {
+      let updatedLines = null;
+      let updatedTimings = null;
+
+      if (scriptEditorMode === "lines") {
+        updatedTimings = normalizeTimingsArray(collectTimingsFromLineEditor());
+        updatedLines = collectLinesFromLineEditor(speechId);
+      } else {
+        const rawEn = (document.getElementById("bulkScriptEn")?.value || "").trim();
+        if (!rawEn) {
+          showModalToast(t("bulkNeedTextWarn"), true);
+          return false;
+        }
+        updatedTimings = normalizeTimingsArray(modalDraftTimings);
+        const en12 = splitBulkTextToTwelve(rawEn, updatedTimings);
+        const desiredTotal = roundSec(document.getElementById("modalTotalDurationInput")?.value || updatedTimings[11].end);
+        if (desiredTotal >= 6 && Math.abs(desiredTotal - roundSec(updatedTimings[11].end)) >= 0.2) {
+          updatedTimings = distributeTimingsByTextLength(desiredTotal, en12);
+        }
+        updatedLines = en12.map((enText, idx) => ({
+          en: enText || loadSavedScript(speechId)[idx].en
+        }));
+      }
+
+      // Persist script lines, timings, and title for this slot
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_SCRIPTS_MAP);
+        const map = raw ? JSON.parse(raw) : {};
+        map[String(speechId)] = updatedLines;
+        localStorage.setItem(STORAGE_KEY_SCRIPTS_MAP, JSON.stringify(map));
+
+        const rawTimings = localStorage.getItem(STORAGE_KEY_TIMINGS_MAP);
+        const timingsMap = rawTimings ? JSON.parse(rawTimings) : {};
+        timingsMap[String(speechId)] = updatedTimings;
+        localStorage.setItem(STORAGE_KEY_TIMINGS_MAP, JSON.stringify(timingsMap));
+
+        const titleVal = (document.getElementById("modalSpeechTitleInput")?.value || "").trim();
+        const rawTitles = localStorage.getItem(STORAGE_KEY_TITLES_MAP);
+        const titleMap = rawTitles ? JSON.parse(rawTitles) : {};
+        const sp = SPEECH_LIBRARY.find(s => s.id === speechId);
+        if (titleVal && (!sp || (titleVal !== sp.titleEn && titleVal !== sp.titleKo))) {
+          titleMap[String(speechId)] = titleVal;
+        } else {
+          delete titleMap[String(speechId)];
+        }
+        localStorage.setItem(STORAGE_KEY_TITLES_MAP, JSON.stringify(titleMap));
+      } catch (_) {}
+
+      modalDraftTimings = updatedTimings.map(tm => ({ ...tm }));
+      modalEditorDirty = false;
+      renderSpeechSelector();
+      if (speechId === currentSpeechId) {
+        audioTimings = updatedTimings.map(tm => ({ ...tm }));
+        scriptLines = updatedLines.map(item => ({ ...item }));
+        renderShadowingLines();
+        initPuzzleForLine(puzzleIndex);
+        renderShowtimeTeleprompter();
+      }
+      renderModalSpeechGrid();
+      return true;
+    }
+
+    function selectModalSpeech(id) {
+      const targetId = Math.max(1, Math.min(12, Number(id) || 1));
+      if (targetId === modalEditingSpeechId) return;
+      if (modalEditorDirty) {
+        const rawEn = (document.getElementById("bulkScriptEn")?.value || "").trim();
+        if (scriptEditorMode === "lines" || rawEn) {
+          if (commitModalSpeech(modalEditingSpeechId)) {
+            showModalToast(t("modalSavedToastFmt", modalEditingSpeechId));
+          }
+        }
+      }
+      populateModalEditorForSpeech(targetId);
+    }
+
+    function saveCurrentModalSpeechOnly() {
+      if (commitModalSpeech(modalEditingSpeechId)) {
+        // Also re-sync formatted 12 lines in bulk view so user sees exact split
+        if (scriptEditorMode === "bulk") {
+          const saved = loadSavedScript(modalEditingSpeechId);
+          const bulkEn = document.getElementById("bulkScriptEn");
+          if (bulkEn) bulkEn.value = saved.map(l => l.en).join("\n");
+          updateBulkStatusBadge();
+        }
+        showModalToast(t("modalSavedToastFmt", modalEditingSpeechId));
+      }
+    }
+
+    function openSetupModal() {
+      updateAudioStatusUI();
+      populateModalEditorForSpeech(currentSpeechId);
+      setScriptEditorMode("bulk");
+
+      document.getElementById("resetConfirmArea").innerHTML = `
+        <button onclick="askResetConfirmation()" class="min-h-[38px] px-4 py-1.5 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold whitespace-nowrap">
+          ${t("btnResetProgress")}
+        </button>
+      `;
+
+      document.getElementById("setupModal").classList.remove("hidden");
+    }
+
+    function closeSetupModal() {
+      stopAllPlayback();
+      document.getElementById("setupModal").classList.add("hidden");
+    }
+
+    function saveScriptEdits() {
+      if (!commitModalSpeech(modalEditingSpeechId)) return;
+      if (modalEditingSpeechId !== currentSpeechId) {
+        selectSpeech(modalEditingSpeechId);
+      }
+      closeSetupModal();
+    }
+
+    function restoreDefaultScript() {
+      const targetId = modalEditingSpeechId || currentSpeechId;
+      try {
+        if (EMBEDDED_CONFIG.scripts) delete EMBEDDED_CONFIG.scripts[String(targetId)];
+        if (EMBEDDED_CONFIG.timings) delete EMBEDDED_CONFIG.timings[String(targetId)];
+        if (EMBEDDED_CONFIG.titles) delete EMBEDDED_CONFIG.titles[String(targetId)];
+
+        const raw = localStorage.getItem(STORAGE_KEY_SCRIPTS_MAP);
+        if (raw) {
+          const map = JSON.parse(raw);
+          delete map[String(targetId)];
+          localStorage.setItem(STORAGE_KEY_SCRIPTS_MAP, JSON.stringify(map));
+        }
+        const rawTimings = localStorage.getItem(STORAGE_KEY_TIMINGS_MAP);
+        if (rawTimings) {
+          const timingsMap = JSON.parse(rawTimings);
+          delete timingsMap[String(targetId)];
+          localStorage.setItem(STORAGE_KEY_TIMINGS_MAP, JSON.stringify(timingsMap));
+        }
+        const rawTitles = localStorage.getItem(STORAGE_KEY_TITLES_MAP);
+        if (rawTitles) {
+          const titleMap = JSON.parse(rawTitles);
+          delete titleMap[String(targetId)];
+          localStorage.setItem(STORAGE_KEY_TITLES_MAP, JSON.stringify(titleMap));
+        }
+      } catch (_) {}
+
+      if (targetId === currentSpeechId) {
+        const entry = SPEECH_LIBRARY.find(s => s.id === targetId) || SPEECH_LIBRARY[0];
+        audioTimings = DEFAULT_AUDIO_TIMINGS.map(tm => ({ ...tm }));
+        scriptLines = entry.lines.map(item => ({ ...item }));
+        renderShadowingLines();
+        initPuzzleForLine(puzzleIndex);
+        renderShowtimeTeleprompter();
+      }
+      renderSpeechSelector();
+      populateModalEditorForSpeech(targetId);
+    }
+
+    function askResetConfirmation() {
+      document.getElementById("resetConfirmArea").innerHTML = `
+        <div class="flex items-center gap-2">
+          <button onclick="confirmResetAllProgress()" class="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold whitespace-nowrap">
+            ${t("btnConfirmReset")}
+          </button>
+          <button onclick="openSetupModal()" class="min-h-[38px] px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold whitespace-nowrap">
+            ${t("btnCancel")}
+          </button>
+        </div>
+      `;
+    }
+
+    function confirmResetAllProgress() {
+      progressState = {
+        stars: Array(12).fill(0),
+        solvedPuzzles: Array(12).fill(false)
+      };
+      lineRecordings.forEach(r => { if (r && r.url) URL.revokeObjectURL(r.url); });
+      recordingsBySpeech[currentSpeechId] = Array(12).fill(null);
+      lineRecordings = recordingsBySpeech[currentSpeechId];
+      saveProgress();
+      closeSetupModal();
+      renderShadowingLines();
+      updateSummaryMetrics();
+      initPuzzleForLine(0);
+    }
+
+    // =========================================================
+    // FEEDBACK CHIMES & CONFETTI CELEBRATION
+    // =========================================================
+    function playRewardChime(stars) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const notes = stars === 3 ? [523.25, 659.25, 783.99, 1046.5] : stars === 2 ? [523.25, 659.25, 783.99] : [523.25, 659.25];
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "triangle";
+          osc.frequency.value = freq;
+          const t0 = ctx.currentTime + idx * 0.09;
+          gain.gain.setValueAtTime(0.001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.11, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.3);
+        });
+      } catch (_) {}
+    }
+
+    function launchMiniConfetti() {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const canvas = document.getElementById("confettiCanvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const colors = ["#0EA5E9", "#F59E0B", "#10B981", "#F43F5E", "#6366F1"];
+      const particles = Array.from({ length: 65 }, () => ({
+        x: canvas.width * (0.2 + Math.random() * 0.6),
+        y: canvas.height * 0.25,
+        vx: (Math.random() - 0.5) * 9,
+        vy: -Math.random() * 9 - 2,
+        size: 6 + Math.random() * 5,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.25
+      }));
+
+      let frame = 0;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.28;
+          p.rot += p.vrot;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.65);
+          ctx.restore();
+        });
+        frame++;
+        if (frame < 95) {
+          requestAnimationFrame(draw);
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+
+    // =========================================================
+    // UTILITIES
+    // =========================================================
+    function formatSec(sec) {
+      const num = Math.max(0, Math.round((Number(sec) || 0) * 10) / 10);
+      const whole = Math.floor(num);
+      const frac = Math.round((num - whole) * 10);
+      const mins = Math.floor(whole / 60);
+      const rem = whole % 60;
+      const base = `${String(mins).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+      return frac > 0 ? `${base}.${frac}` : base;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(str) {
+      return escapeHtml(str).replace(/'/g, "&#39;");
+    }
+
+    function capturePristineHtmlSnapshot() {
+      try {
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelectorAll('script[src*="@vite"], script[src*="@react-refresh"]').forEach(el => el.remove());
+        clone.querySelectorAll('head style:not(#appBaseStyles)').forEach(el => el.remove());
+        const embedded = clone.querySelector('#embeddedConfigJson');
+        if (embedded) embedded.textContent = "{}";
+        return "<!doctype html>\n" + clone.outerHTML;
+      } catch (_) {
+        return "";
+      }
+    }
+
+    // Boot application
+    document.addEventListener("DOMContentLoaded", () => {
+      pristineHtmlSnapshot = capturePristineHtmlSnapshot();
+      initApp();
+    });
+  </script>
+</body>
+</html>
