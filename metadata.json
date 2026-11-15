@@ -1,6 +1,0 @@
-{
-  "name": "StarSpeech — Kids English Shadowing Studio",
-  "description": "Interactive 12-line English speech shadowing, word puzzle warm-up, and showtime stage app for kids.",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
